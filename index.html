@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prototype Động - Sửa code bất kỳ với AI (v7 - Xử lý JSON nâng cao)</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .monaco-editor { border-radius: 0.5rem; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); }
+        #previewFrame { border: 1px solid #d1d5db; border-radius: 0.5rem; width: 100%; height: 100%; }
+        .spinner {
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-left-color: #fff;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .hidden { display: none; }
+        .change-card {
+            background-color: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+        }
+        .change-card pre {
+            background-color: #f9fafb;
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .code-old { color: #be123c; }
+        .code-new { color: #166534; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-screen-2xl mx-auto bg-white p-6 md:p-8 rounded-xl shadow-lg">
+        <header class="mb-6 pb-4 border-b border-gray-200">
+            <h1 class="text-3xl font-bold text-gray-800">Prototype Động: Sửa Code Bất Kỳ Với AI</h1>
+            <p class="mt-2 text-gray-600">
+                AI sẽ đề xuất một danh sách các thay đổi. Bạn có thể áp dụng từng thay đổi một cách độc lập.
+            </p>
+        </header>
+
+        <div class="grid grid-cols-2 gap-8">
+            <!-- Cột 1: Trình soạn thảo -->
+            <div class="flex flex-col lg:col-span-1">
+                <h2 class="text-xl font-semibold text-gray-700 mb-2">1. Dán mã nguồn của bạn vào đây</h2>
+                <div id="editorContainer" class="flex-grow h-96 min-h-[600px] border border-gray-300 rounded-lg"></div>
+            </div>
+
+            <!-- Cột 2: Điều khiển AI và Trạng thái -->
+            <div class="flex flex-col lg:col-span-1">
+                <div class="bg-gray-50 p-6 rounded-lg border border-gray-200 h-full">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-2">2. Điều khiển AI</h2>
+                    <p class="text-sm text-gray-500 mb-4">Nhập yêu cầu của bạn. AI sẽ chia thành các bước nhỏ.</p>
+                    <textarea id="aiPromptInput" class="w-full p-2 border rounded-md" rows="5" placeholder="Ví dụ: Thay đổi tiêu đề thành 'Xin chào' và đổi màu nền nút Chạy Script thành màu đỏ."></textarea>
+                    
+                    <button id="runAiBtn" class="mt-4 w-full bg-red-500 hover:bg-red-700 text-white font-bold py-3 px-5 rounded-lg shadow-md transition duration-300 opacity-50 cursor-not-allowed flex items-center justify-center" disabled>
+                        <span id="buttonText">Gửi yêu cầu AI</span>
+                        <div id="buttonSpinner" class="spinner hidden ml-3"></div>
+                    </button>
+
+                    <h2 class="text-xl font-semibold text-gray-700 mt-8 mb-2">3. Danh sách thay đổi đề xuất</h2>
+                     <div id="aiResponseContainer" class="h-96 overflow-y-auto">
+                        <p id="aiResponsePlaceholder" class="text-gray-500">Đề xuất của AI sẽ xuất hiện ở đây...</p>
+                     </div>
+
+                    <h2 class="text-xl font-semibold text-gray-700 mt-8 mb-2">4. Trạng thái</h2>
+                    <div id="status" class="w-full bg-white p-4 rounded-md shadow-inner border text-gray-600 min-h-[50px]">
+                        Đang chờ tải trang và các thư viện...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cột 3: Xem trước (Preview) -->
+            <div class="flex flex-col lg:col-span-1">
+                <h2 class="text-xl font-semibold text-gray-700 mb-2">5. Xem trước trực quan</h2>
+                <button id="openModalBtn" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                    Xem trước
+                </button>
+                <div id="previewModal" class="hidden overflow-y-auto overflow-x-hidden fixed top-0 right-0 left-0 z-50 w-full md:inset-0 h-[90vh] md:h-[90vh]">
+                    <div class="relative w-full h-full max-w-7xl p-4 mx-auto aspect-video">
+                        <div class="relative bg-white rounded-lg shadow">
+                            <button type="button" class="absolute top-3 right-2.5 text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm p-1.5 ml-auto inline-flex items-center dark:hover:bg-gray-800 dark:hover:text-white" data-modal-toggle="previewModal">
+                                <svg aria-hidden="true" class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
+                                <span class="sr-only">Close modal</span>
+                            </button>
+                            <div class="p-6">
+                                <iframe id="previewFrame" title="Visual Preview" class="w-full h-[600px] border border-gray-300 rounded-lg"></iframe>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <script>
+                    const openModalBtn = document.getElementById('openModalBtn');
+                    const previewModal = document.getElementById('previewModal');
+                    openModalBtn.addEventListener('click', () => {
+                        previewModal.classList.remove('hidden');
+                        updatePreview();
+                    });
+                    document.getElementById('previewModal').querySelector('button').addEventListener('click', () => {
+                        previewModal.classList.add('hidden');
+                    });
+                </script>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-app.js";
+        import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-ai.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDt6KZTLJ5ItNShxAPlpKKHC8eHiIBSjmY",
+            authDomain: "aicodepro-lien.firebaseapp.com",
+            projectId: "aicodepro-lien",
+            storageBucket: "aicodepro-lien.firebasestorage.app",
+            messagingSenderId: "277847908656",
+            appId: "1:277847908656:web:77eb210b8e2b2b7dbca8f5"
+        };
+
+        let monacoEditor;
+        let aiModel;
+
+        const statusEl = document.getElementById('status');
+        const runAiBtn = document.getElementById('runAiBtn');
+        const previewFrame = document.getElementById('previewFrame');
+        const aiPromptInput = document.getElementById('aiPromptInput');
+        const aiResponseContainer = document.getElementById('aiResponseContainer');
+        const aiResponsePlaceholder = document.getElementById('aiResponsePlaceholder');
+        const buttonText = document.getElementById('buttonText');
+        const buttonSpinner = document.getElementById('buttonSpinner');
+        
+        const placeholderCode = `<!-- Dán mã nguồn HTML của bạn vào đây -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Trang Mẫu</title>
+</head>
+<body>
+    <h1 id="title">Tiêu đề Gốc</h1>
+    <button onclick="changeContent()">Chạy Script</button>
+    <script>
+        function changeContent() {
+            // AI sẽ sửa hàm này
+            document.getElementById('title').textContent = 'Nội dung Gốc';
+        }
+    <\/script>
+</body>
+</html>`;
+
+        window.onload = function() {
+            statusEl.textContent = "Đang khởi tạo trình soạn thảo...";
+            
+            require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' }});
+            require(['vs/editor/editor.main'], function() {
+                monacoEditor = monaco.editor.create(document.getElementById('editorContainer'), {
+                    value: placeholderCode,
+                    language: 'html',
+                    theme: 'vs-light',
+                    automaticLayout: true,
+                    fontSize: 14,
+                    wordWrap: 'on'
+                });
+
+                monacoEditor.onDidChangeModelContent(() => updatePreview());
+                updatePreview();
+                statusEl.textContent = "Trình soạn thảo sẵn sàng. Đang khởi tạo AI Model...";
+                initializeFirebaseAI();
+            });
+        };
+
+        function initializeFirebaseAI() {
+            try {
+                const app = initializeApp(firebaseConfig);
+                const ai = getAI(app, { backend: new GoogleAIBackend() });
+                aiModel = getGenerativeModel(ai, { model: "gemini-1.5-flash-latest" });
+                
+                statusEl.textContent = "Hệ thống đã sẵn sàng. Hãy dán code và ra lệnh cho AI.";
+                runAiBtn.disabled = false;
+                runAiBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                runAiBtn.addEventListener('click', getAiSuggestion);
+
+            } catch (e) {
+                console.error("Lỗi khi khởi tạo AI Model:", e);
+                statusEl.innerHTML = `Lỗi khởi tạo AI Model: ${e.message}.<br>Hãy chắc rằng bạn đã thay thế firebaseConfig và kích hoạt AI cho dự án.`;
+                statusEl.classList.add('text-red-500');
+            }
+        }
+
+        async function getAiSuggestion() {
+            const userPrompt = aiPromptInput.value.trim();
+            if (!userPrompt) {
+                statusEl.textContent = "Vui lòng nhập yêu cầu cho AI.";
+                statusEl.classList.add('text-red-500');
+                return;
+            }
+
+            setLoadingState(true);
+            statusEl.textContent = "1. Đang gửi yêu cầu đến Gemini để phân tích...";
+            aiResponseContainer.innerHTML = '';
+            aiResponsePlaceholder.textContent = "Đang chờ phản hồi...";
+            aiResponseContainer.appendChild(aiResponsePlaceholder);
+
+            try {
+                const fullHtmlCode = monacoEditor.getValue();
+                
+                // --- LỜI NHẮC AI ĐƯỢC CẬP NHẬT THEO PHÂN TÍCH ---
+                const finalPrompt = `
+You are an expert code modification assistant. Your task is to break down a user's request into a series of small, specific code replacements.
+You must analyze the user's request and the provided source code, then generate a list of changes.
+
+SOURCE CODE:
+\`\`\`html
+${fullHtmlCode}
+\`\`\`
+
+USER'S REQUEST:
+"${userPrompt}"
+
+TASK:
+Generate a single JSON object containing a list of changes.
+**You MUST wrap the final JSON object in a markdown code block like this: \`\`\`json ... \`\`\`**
+
+The JSON object must have a single key "changes", which is an array.
+Each object in the "changes" array must have three keys:
+1.  "description": A brief, user-friendly description of the change in Vietnamese.
+2.  "oldCode": The exact, contiguous block of code to be replaced. This must be found in the source code.
+3.  "newCode": The new block of code that will replace the old one.
+
+**IMPORTANT RULES:**
+- Only return the JSON object, wrapped in the \`\`\`json ... \`\`\` block. No other text or markdown.
+- The "oldCode" must be an exact substring from the provided source code.
+- If the user's request is unclear or cannot be translated into specific code changes, return an empty "changes" array.
+`;
+
+                const result = await aiModel.generateContent(finalPrompt);
+                const responseText = result.response.text();
+                
+                // --- BƯỚC 2: TRÍCH XUẤT KHỐI JSON ---
+                const jsonString = extractJsonBlock(responseText);
+                if (!jsonString) {
+                    throw new Error("Không tìm thấy khối JSON hợp lệ trong phản hồi của AI.");
+                }
+                
+                // --- BƯỚC 4: PHÂN TÍCH JSON ---
+                const aiResponse = JSON.parse(jsonString);
+                
+                if (!aiResponse.changes || !Array.isArray(aiResponse.changes)) {
+                    throw new Error("Phản hồi của AI không đúng định dạng JSON yêu cầu (thiếu key 'changes' hoặc không phải là mảng).");
+                }
+                
+                // --- BƯỚC 5 & 6: RENDER VÀ CHÈN VÀO DOM ---
+                renderChangeList(aiResponse.changes);
+
+            } catch (error) {
+                console.error("Lỗi trong quá trình lấy đề xuất AI:", error);
+                statusEl.textContent = `Đã xảy ra lỗi: ${error.message}`;
+                statusEl.classList.add('text-red-500');
+                aiResponsePlaceholder.textContent = `Lỗi: ${error.message}`;
+            } finally {
+                setLoadingState(false);
+            }
+        }
+
+        // HÀM MỚI: Trích xuất khối JSON từ phản hồi của AI
+        function extractJsonBlock(text) {
+            const match = text.match(/```json\s*([\s\S]*?)\s*```/);
+            if (match && match[1]) {
+                return match[1].trim();
+            }
+            // Fallback: Nếu không có khối markdown, thử tìm đối tượng JSON thô
+            const rawJsonMatch = text.match(/{\s*"changes":\s*\[[\s\S]*\]\s*}/);
+            if(rawJsonMatch && rawJsonMatch[0]) {
+                return rawJsonMatch[0].trim();
+            }
+            console.error("Không thể trích xuất JSON. Phản hồi thô:", text);
+            return null;
+        }
+        
+        function renderChangeList(changes) {
+            aiResponseContainer.innerHTML = ''; // Xóa placeholder
+            
+            if (changes.length === 0) {
+                aiResponsePlaceholder.textContent = "AI không tìm thấy thay đổi nào có thể thực hiện từ yêu cầu của bạn.";
+                aiResponseContainer.appendChild(aiResponsePlaceholder);
+                statusEl.textContent = "Sẵn sàng cho yêu cầu mới.";
+                return;
+            }
+
+            statusEl.innerHTML = `<b>AI đã đề xuất ${changes.length} thay đổi. Vui lòng xem lại và áp dụng.</b>`;
+            statusEl.classList.remove('text-red-500');
+            statusEl.classList.add('text-blue-600');
+
+            changes.forEach((change, index) => {
+                const card = document.createElement('div');
+                card.className = 'change-card';
+
+                card.innerHTML = `
+                    <p class="font-semibold text-gray-800">${index + 1}. ${change.description}</p>
+                    <div class="mt-2">
+                        <p class="text-sm font-medium text-gray-500">Code cũ:</p>
+                        <pre class="code-old"><code></code></pre>
+                    </div>
+                    <div class="mt-2">
+                        <p class="text-sm font-medium text-gray-500">Code mới:</p>
+                        <pre class="code-new"><code></code></pre>
+                    </div>
+                    <button class="apply-change-btn mt-4 w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300">
+                        [✓] Áp dụng thay đổi này
+                    </button>
+                `;
+                
+                card.querySelector('.code-old code').textContent = change.oldCode;
+                card.querySelector('.code-new code').textContent = change.newCode;
+
+                const applyBtn = card.querySelector('.apply-change-btn');
+                applyBtn.addEventListener('click', () => {
+                    applySingleChange(change.oldCode, change.newCode, applyBtn);
+                });
+
+                aiResponseContainer.appendChild(card);
+            });
+        }
+
+        function applySingleChange(oldCode, newCode, button) {
+            const editorModel = monacoEditor.getModel();
+            const matches = editorModel.findMatches(oldCode, false, false, true, null, true);
+
+            if (matches.length > 0) {
+                const range = matches[0].range;
+                const op = { range: range, text: newCode };
+                monacoEditor.executeEdits("ai-replace-single", [op]);
+
+                button.textContent = 'Đã áp dụng';
+                button.disabled = true;
+                button.classList.remove('bg-green-600', 'hover:bg-green-700');
+                button.classList.add('bg-gray-400', 'cursor-not-allowed');
+                statusEl.textContent = "Áp dụng thay đổi thành công!";
+                statusEl.classList.add('text-green-600');
+            } else {
+                alert(`Không tìm thấy đoạn mã cũ trong trình soạn thảo:\n\n${oldCode}`);
+                statusEl.textContent = "Lỗi: Không tìm thấy mã cũ để thay thế.";
+                statusEl.classList.add('text-red-500');
+            }
+        }
+
+        function updatePreview() {
+            try {
+                const code = monacoEditor.getValue();
+                previewFrame.srcdoc = code;
+            } catch (e) { /* Bỏ qua lỗi nhỏ */ }
+        }
+
+        function setLoadingState(isLoading) {
+            runAiBtn.disabled = isLoading;
+            if (isLoading) {
+                buttonText.textContent = 'Đang xử lý...';
+                buttonSpinner.classList.remove('hidden');
+            } else {
+                buttonText.textContent = 'Gửi yêu cầu AI';
+                buttonSpinner.classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+</html>
