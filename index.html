@@ -1,4 +1,4 @@
-
+```html
 <!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -10,9 +10,10 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
     
     <style>
-        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
-        .monaco-editor { border-radius: 0.5rem; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); }
-        #previewFrame { border: 1px solid #d1d5db; border-radius: 0.5rem; width: 100%; height: 100%; }
+        /* CSS tùy chỉnh cho phong cách Material Design */
+        body { 
+            font-family: 'Inter', sans-serif; 
+        }
         .spinner {
             border: 3px solid rgba(255, 255, 255, 0.3);
             border-left-color: #fff;
@@ -23,28 +24,23 @@
         }
         @keyframes spin { to { transform: rotate(360deg); } }
         .hidden { display: none; }
-        .change-card {
-            background-color: white;
-            border: 1px solid #e5e7eb;
-            border-radius: 0.5rem;
-            padding: 1rem;
-            margin-bottom: 1rem;
-            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+        
+        /* Màu sắc cho code cũ và mới theo Material */
+        .code-old { color: #B91C1C; /* red-700 */ }
+        .code-new { color: #047857; /* green-700 */ }
+
+        /* Đảm bảo khung xem trước được bo góc và có viền */
+        #previewFrame { 
+            border: 1px solid #d1d5db; 
+            border-radius: 0.5rem; 
+            width: 100%; 
+            height: 100%; 
         }
-        .change-card pre {
-            background-color: #f9fafb;
-            padding: 0.5rem;
-            border-radius: 0.25rem;
-            white-space: pre-wrap;
-            word-break: break-all;
-        }
-        .code-old { color: #be123c; }
-        .code-new { color: #166534; }
     </style>
 </head>
-<body class="p-4 md:p-8">
+<body class="p-4 md:p-8 bg-gray-100 text-gray-900">
 
-    <div class="max-w-screen-2xl mx-auto bg-white p-6 md:p-8 rounded-xl shadow-lg">
+    <div class="max-w-screen-2xl mx-auto bg-white p-6 md:p-8 rounded-xl shadow-xl">
         <header class="mb-6 pb-4 border-b border-gray-200">
             <h1 class="text-3xl font-bold text-gray-800">Prototype Động: Sửa Code Bất Kỳ Với AI</h1>
             <p class="mt-2 text-gray-600">
@@ -52,21 +48,21 @@
             </p>
         </header>
 
-        <div class="grid grid-cols-2 gap-8">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <!-- Cột 1: Trình soạn thảo -->
-            <div class="flex flex-col lg:col-span-1">
+            <div class="flex flex-col">
                 <h2 class="text-xl font-semibold text-gray-700 mb-2">1. Dán mã nguồn của bạn vào đây</h2>
-                <div id="editorContainer" class="flex-grow h-96 min-h-[600px] border border-gray-300 rounded-lg"></div>
+                <div id="editorContainer" class="flex-grow h-96 min-h-[600px] border border-gray-300 rounded-lg shadow-md"></div>
             </div>
 
             <!-- Cột 2: Điều khiển AI và Trạng thái -->
-            <div class="flex flex-col lg:col-span-1">
-                <div class="bg-gray-50 p-6 rounded-lg border border-gray-200 h-full">
+            <div class="flex flex-col">
+                <div class="bg-indigo-50 p-6 rounded-lg border border-indigo-200 h-full">
                     <h2 class="text-xl font-semibold text-gray-700 mb-2">2. Điều khiển AI</h2>
                     <p class="text-sm text-gray-500 mb-4">Nhập yêu cầu của bạn. AI sẽ chia thành các bước nhỏ.</p>
-                    <textarea id="aiPromptInput" class="w-full p-2 border rounded-md" rows="5" placeholder="Ví dụ: Thay đổi tiêu đề thành 'Xin chào' và đổi màu nền nút Chạy Script thành màu đỏ."></textarea>
+                    <textarea id="aiPromptInput" class="w-full p-2 border rounded-md focus:ring-indigo-500 focus:border-indigo-500" rows="5" placeholder="Ví dụ: Thay đổi tiêu đề thành 'Xin chào' và đổi màu nền nút Chạy Script thành màu đỏ."></textarea>
                     
-                    <button id="runAiBtn" class="mt-4 w-full bg-yellow-500 hover:bg-yellow-700 text-white font-bold py-3 px-5 rounded-lg shadow-md transition duration-300 opacity-50 cursor-not-allowed flex items-center justify-center" disabled>
+                    <button id="runAiBtn" class="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-5 rounded-lg shadow-md transition duration-300 opacity-50 cursor-not-allowed flex items-center justify-center" disabled>
                         <span id="buttonText">Gửi yêu cầu AI</span>
                         <div id="buttonSpinner" class="spinner hidden ml-3"></div>
                     </button>
@@ -83,21 +79,22 @@
                 </div>
             </div>
 
-            <!-- Cột 3: Xem trước (Preview) -->
-            <div class="flex flex-col lg:col-span-1">
+            <!-- Cột 3: Xem trước (Preview) - Đặt ở một hàng riêng nếu cần, hoặc cùng hàng nếu bố cục cho phép -->
+            <!-- Giữ nguyên cột này như cũ, có thể điều chỉnh lại grid nếu muốn đặt nó độc lập -->
+            <div class="flex flex-col lg:col-span-2 mt-8"> 
                 <h2 class="text-xl font-semibold text-gray-700 mb-2">5. Xem trước trực quan</h2>
-                <button id="openModalBtn" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                <button id="openModalBtn" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg shadow-md">
                     Xem trước
                 </button>
                 <div id="previewModal" class="hidden overflow-y-auto overflow-x-hidden fixed top-0 right-0 left-0 z-50 w-full md:inset-0 h-[90vh] md:h-[90vh]">
                     <div class="relative w-full h-full max-w-7xl p-4 mx-auto aspect-video">
-                        <div class="relative bg-white rounded-lg shadow">
+                        <div class="relative bg-white rounded-lg shadow-xl">
                             <button type="button" class="absolute top-3 right-2.5 text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm p-1.5 ml-auto inline-flex items-center dark:hover:bg-gray-800 dark:hover:text-white" data-modal-toggle="previewModal">
                                 <svg aria-hidden="true" class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
                                 <span class="sr-only">Close modal</span>
                             </button>
                             <div class="p-6">
-                                <iframe id="previewFrame" title="Visual Preview" class="w-full h-[600px] border border-gray-300 rounded-lg"></iframe>
+                                <iframe id="previewFrame" title="Visual Preview" class="w-full h-[600px]"></iframe>
                             </div>
                         </div>
                     </div>
@@ -305,7 +302,8 @@ Each object in the "changes" array must have three keys:
 
             changes.forEach((change, index) => {
                 const card = document.createElement('div');
-                card.className = 'change-card';
+                // Sử dụng Tailwind classes thay thế cho .change-card trong CSS tùy chỉnh
+                card.className = 'bg-white p-4 mb-4 rounded-lg shadow-md'; 
 
                 card.innerHTML = `
                     <p class="font-semibold text-gray-800">${index + 1}. ${change.description}</p>
@@ -376,3 +374,4 @@ Each object in the "changes" array must have three keys:
     </script>
 </body>
 </html>
+```
