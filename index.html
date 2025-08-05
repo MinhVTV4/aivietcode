@@ -242,7 +242,7 @@
                 attachAppEventListeners();
                 
                 try {
-                    aiModel = getGenerativeModel(getAI(app), { model: "gemini-1.5-flash-latest" });
+                    aiModel = getGenerativeModel(getAI(app), { model: "gemini-2.5-flash" });
                     statusEl.textContent = "Hệ thống đã sẵn sàng.";
                 } catch (e) {
                     statusEl.textContent = `Lỗi khởi tạo AI: ${e.message}`;
