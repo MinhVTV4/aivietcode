@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototype Động - Sửa code bất kỳ với AI (v24.0 - AI Explanation)</title>
+    <title>Prototype Động - Sửa code bất kỳ với AI (v25.0 - Format Fix)</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
@@ -827,7 +827,7 @@ Generate a JSON object with a "changes" array containing a single modification o
 - "action" must be "modify".
 - "file" must be "${activeFilePath}".
 - "reasoning" must be a DETAILED explanation in VIETNAMESE about why the change is necessary and what it improves.
-- "oldCode" MUST be the entire original code snippet provided.
+- "oldCode" MUST be an EXACT, character-for-character copy of the original code snippet. DO NOT reformat or change any whitespace or indentation.
 - "newCode" MUST be the complete, modified version of the snippet.
 **CRITICAL JSON FORMATTING RULES:**
 - All values must be valid JSON strings (newlines escaped as \\n, quotes as \\").
@@ -844,7 +844,7 @@ CURRENT USER'S REQUEST:
 "${userPrompt}"
 TASK:
 Generate a JSON object with a "changes" array. Each object in the array represents an action:
-- For MODIFICATIONS: { "action": "modify", "file": "path/to/file.ext", "description": "...", "reasoning": "A detailed explanation in VIETNAMESE...", "oldCode": "...", "newCode": "..." }
+- For MODIFICATIONS: { "action": "modify", "file": "path/to/file.ext", "description": "...", "reasoning": "A detailed explanation in VIETNAMESE...", "oldCode": "...", "newCode": "..." }. The "oldCode" value MUST be an EXACT, character-for-character copy of the original code block. DO NOT reformat or change any whitespace or indentation.
 - For NEW FILES: { "action": "create", "file": "path/to/new_file.ext", "description": "...", "reasoning": "A detailed explanation in VIETNAMESE about the purpose of this new file...", "newCode": "..." }
 **CRITICAL JSON FORMATTING RULES:**
 - All values MUST be valid JSON strings (newlines escaped as \\n, quotes as \\").
