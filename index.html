@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototype Động - Sửa code bất kỳ với AI (v21.3 - Hoàn thiện)</title>
+    <title>Prototype Động - Sửa code bất kỳ với AI (v22.0 - UI/UX Cải tiến)</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
@@ -25,6 +25,16 @@
         .code-old { color: #B91C1C; }
         .code-new { color: #047857; }
         .change-group-header { font-weight: 600; margin-top: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #e5e7eb; }
+        
+        /* Fullscreen loader styles */
+        .loader-spin {
+            border: 5px solid #f3f3f3; /* Light grey */
+            border-top: 5px solid #4f46e5; /* Indigo */
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
     </style>
 </head>
 <body class="bg-gray-100">
@@ -83,7 +93,6 @@
                         <p class="text-sm text-gray-500 mb-4">Nhập yêu cầu của bạn, hoặc dùng Trợ lý Khởi tạo (💡) để bắt đầu.</p>
                         <textarea id="aiPromptInput" class="w-full p-2 border rounded-md" rows="5"></textarea>
                         
-                        <!-- FOCUS MODE CHECKBOX -->
                         <div class="mt-2 flex items-center">
                             <input id="focus-mode-checkbox" type="checkbox" class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
                             <label for="focus-mode-checkbox" class="ml-2 block text-sm text-gray-900">Chỉ làm việc trên vùng đã chọn</label>
@@ -110,7 +119,10 @@
         </div>
     </div>
     
+    <!-- Context Menu -->
     <div id="contextMenu" class="hidden"></div>
+
+    <!-- Preview Modal -->
     <div id="previewModal" class="hidden fixed inset-0 z-50 overflow-y-auto overflow-x-hidden flex items-center justify-center bg-gray-900 bg-opacity-75">
         <div class="relative w-full h-[90vh] max-w-7xl mx-auto p-4 flex flex-col">
             <div class="relative bg-white rounded-lg shadow-xl flex flex-col flex-grow">
@@ -129,6 +141,8 @@
             </div>
         </div>
     </div>
+
+    <!-- Idea Modal -->
     <div id="ideaModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-75">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl flex flex-col">
             <div class="flex justify-between items-center p-4 border-b">
@@ -146,6 +160,8 @@
             </div>
         </div>
     </div>
+
+    <!-- Load Project Modal -->
     <div id="loadProjectModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-75">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl">
             <div class="flex justify-between items-center p-4 border-b">
@@ -155,6 +171,31 @@
             <div id="load-modal-content" class="p-6 max-h-96 overflow-y-auto"></div>
         </div>
     </div>
+    
+    <!-- Generic Modal -->
+    <div id="genericModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-gray-900 bg-opacity-75 transition-opacity duration-300">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md flex flex-col transform scale-95 transition-transform duration-300">
+            <div class="flex justify-between items-center p-4 border-b">
+                <h3 id="modalTitle" class="text-xl font-semibold text-gray-800"></h3>
+                <button id="modalCloseBtn" class="text-gray-400 hover:text-gray-600">&times;</button>
+            </div>
+            <div id="modalContent" class="p-6 space-y-4">
+                <!-- Content will be injected here by JS -->
+            </div>
+            <div id="modalActions" class="flex justify-end p-4 bg-gray-50 border-t rounded-b-lg space-x-3">
+                <!-- Action buttons will be injected here by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Full Screen Loader -->
+    <div id="fullScreenLoader" class="hidden fixed inset-0 z-[200] flex items-center justify-center bg-white bg-opacity-80">
+        <div class="flex flex-col items-center">
+            <div class="loader-spin"></div>
+            <p id="loaderText" class="mt-4 text-lg font-semibold text-gray-700">Đang xử lý...</p>
+        </div>
+    </div>
+
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-app.js";
@@ -288,10 +329,10 @@
 
             if (currentProjectId) {
                 // Save a new version
-                const commitMessage = prompt("Nhập ghi chú cho phiên bản này (ví dụ: 'Thêm nút đăng nhập'):", "");
-                if (commitMessage === null) return;
+                const commitMessage = await showPrompt("Lưu phiên bản mới", "Nhập ghi chú cho phiên bản này (ví dụ: 'Thêm nút đăng nhập'):", "");
+                if (commitMessage === null) return; // User cancelled
 
-                statusEl.textContent = "Đang lưu phiên bản mới...";
+                showLoader("Đang lưu phiên bản...");
                 try {
                     const projectRef = doc(db, "projects", currentProjectId);
                     const projectSnap = await getDoc(projectRef);
@@ -317,14 +358,16 @@
                 } catch (error) {
                     console.error("Lỗi khi lưu phiên bản mới:", error);
                     statusEl.textContent = "Lỗi khi lưu phiên bản mới.";
+                } finally {
+                    hideLoader();
                 }
 
             } else {
                 // Save a new project
-                const projectName = prompt("Nhập tên dự án mới:");
-                if (!projectName) return;
+                const projectName = await showPrompt("Tạo dự án mới", "Nhập tên dự án:", "Dự án của tôi");
+                if (!projectName) return; // User cancelled or entered empty name
 
-                statusEl.textContent = "Đang tạo dự án mới...";
+                showLoader("Đang tạo dự án...");
                 try {
                     const projectRef = await addDoc(collection(db, "projects"), {
                         uid: currentUser.uid,
@@ -351,13 +394,15 @@
                 } catch (error) {
                     console.error("Lỗi khi tạo dự án mới:", error);
                     statusEl.textContent = "Lỗi khi tạo dự án mới.";
+                } finally {
+                    hideLoader();
                 }
             }
         }
 
         async function loadProjects() {
             const modalContent = document.getElementById('load-modal-content');
-            modalContent.innerHTML = '<div class="spinner"></div>';
+            modalContent.innerHTML = '<div class="flex justify-center"><div class="loader-spin"></div></div>';
             document.getElementById('load-modal-title').textContent = "Mở Dự án";
             document.getElementById('loadProjectModal').classList.remove('hidden');
 
@@ -381,7 +426,7 @@
 
         async function showProjectVersions(projectId, projectName) {
             const modalContent = document.getElementById('load-modal-content');
-            modalContent.innerHTML = '<div class="spinner"></div>';
+            modalContent.innerHTML = '<div class="flex justify-center"><div class="loader-spin"></div></div>';
             document.getElementById('load-modal-title').textContent = `Phiên bản của "${projectName}"`;
             
             const backButton = document.createElement('button');
@@ -417,30 +462,37 @@
         }
 
         async function openProjectVersion(projectId, projectName, versionId) {
-            statusEl.textContent = `Đang mở dự án...`;
             document.getElementById('loadProjectModal').classList.add('hidden');
-            const docRef = doc(db, "projects", projectId, "versions", versionId);
-            const docSnap = await getDoc(docRef);
+            showLoader("Đang mở dự án...");
+            try {
+                const docRef = doc(db, "projects", projectId, "versions", versionId);
+                const docSnap = await getDoc(docRef);
 
-            if (docSnap.exists()) {
-                const versionData = docSnap.data();
-                Object.values(projectModels).forEach(model => model.dispose());
-                projectModels = {};
+                if (docSnap.exists()) {
+                    const versionData = docSnap.data();
+                    Object.values(projectModels).forEach(model => model.dispose());
+                    projectModels = {};
 
-                projectStructure = JSON.parse(versionData.structure);
-                createModelsFromStructure(projectStructure, versionData.files);
-                
-                currentProjectId = projectId;
-                currentProjectName = projectName;
-                updateProjectDisplay();
+                    projectStructure = JSON.parse(versionData.structure);
+                    createModelsFromStructure(projectStructure, versionData.files);
+                    
+                    currentProjectId = projectId;
+                    currentProjectName = projectName;
+                    updateProjectDisplay();
 
-                activeFilePath = 'index.html';
-                monacoEditor.setModel(projectModels[activeFilePath]);
-                renderFileExplorer();
-                updatePreview();
-                statusEl.textContent = `Đã mở dự án "${projectName}", phiên bản ${versionData.versionNumber}.`;
-            } else {
-                statusEl.textContent = "Không tìm thấy phiên bản dự án.";
+                    activeFilePath = 'index.html';
+                    monacoEditor.setModel(projectModels[activeFilePath]);
+                    renderFileExplorer();
+                    updatePreview();
+                    statusEl.textContent = `Đã mở dự án "${projectName}", phiên bản ${versionData.versionNumber}.`;
+                } else {
+                    statusEl.textContent = "Không tìm thấy phiên bản dự án.";
+                }
+            } catch (error) {
+                console.error("Lỗi khi mở dự án:", error);
+                statusEl.textContent = `Lỗi khi mở dự án: ${error.message}`;
+            } finally {
+                hideLoader();
             }
         }
         
@@ -561,15 +613,15 @@
             const targetType = item ? item.type : 'root';
 
             if (targetType === 'file') {
-                menuItems = `<button class="context-menu-item" onclick="window.handleRename('${path}')">Rename</button>
-                             <button class="context-menu-item" onclick="window.handleDelete('${path}')">Delete</button>`;
+                menuItems = `<button class="context-menu-item" onclick="window.handleRename('${path}')">Đổi tên</button>
+                             <button class="context-menu-item" onclick="window.handleDelete('${path}')">Xóa</button>`;
             } else { // Folder or root
-                menuItems = `<button class="context-menu-item" onclick="window.handleNewFile('${path}')">New File</button>
-                             <button class="context-menu-item" onclick="window.handleNewFolder('${path}')">New Folder</button>`;
+                menuItems = `<button class="context-menu-item" onclick="window.handleNewFile('${path}')">Tệp mới</button>
+                             <button class="context-menu-item" onclick="window.handleNewFolder('${path}')">Thư mục mới</button>`;
                 if (targetType === 'folder') {
-                    menuItems += `<div class="context-menu-separator"></div>
-                                  <button class="context-menu-item" onclick="window.handleRename('${path}')">Rename</button>
-                                  <button class="context-menu-item" onclick="window.handleDelete('${path}')">Delete</button>`;
+                    menuItems += `<div class="my-1 h-px bg-gray-200"></div>
+                                  <button class="context-menu-item" onclick="window.handleRename('${path}')">Đổi tên</button>
+                                  <button class="context-menu-item" onclick="window.handleDelete('${path}')">Xóa</button>`;
                 }
             }
             
@@ -584,9 +636,9 @@
         }
 
         // --- File Operations ---
-        window.handleNewFile = (parentPath) => {
+        window.handleNewFile = async (parentPath) => {
             hideContextMenu();
-            const filename = prompt("Enter new file name:");
+            const filename = await showPrompt("Tạo tệp mới", "Nhập tên tệp:", "new-file.js");
             if (!filename) return;
 
             const newPath = parentPath ? `${parentPath}/${filename}` : filename;
@@ -594,7 +646,7 @@
             const targetChildren = parentPath ? parentItem.children : projectStructure;
 
             if (targetChildren[filename]) {
-                alert("A file or folder with this name already exists.");
+                showAlert("Lỗi", "Một tệp hoặc thư mục với tên này đã tồn tại.");
                 return;
             }
             
@@ -605,16 +657,16 @@
             switchFile(newPath);
         };
 
-        window.handleNewFolder = (parentPath) => {
+        window.handleNewFolder = async (parentPath) => {
             hideContextMenu();
-            const foldername = prompt("Enter new folder name:");
+            const foldername = await showPrompt("Tạo thư mục mới", "Nhập tên thư mục:", "new-folder");
             if (!foldername) return;
 
             const { item: parentItem } = findItemByPath(parentPath);
             const targetChildren = parentPath ? parentItem.children : projectStructure;
 
             if (targetChildren[foldername]) {
-                alert("A file or folder with this name already exists.");
+                showAlert("Lỗi", "Một tệp hoặc thư mục với tên này đã tồn tại.");
                 return;
             }
 
@@ -622,16 +674,16 @@
             renderFileExplorer();
         };
 
-        window.handleRename = (path) => {
+        window.handleRename = async (path) => {
             hideContextMenu();
             const { item, parent, key } = findItemAndParentByPath(path);
             if (!item) return;
 
-            const newName = prompt("Enter new name:", key);
+            const newName = await showPrompt("Đổi tên", "Nhập tên mới:", key);
             if (!newName || newName === key) return;
             
             if (parent[newName]) {
-                alert("A file or folder with this name already exists.");
+                showAlert("Lỗi", "Một tệp hoặc thư mục với tên này đã tồn tại.");
                 return;
             }
 
@@ -661,10 +713,13 @@
             renderFileExplorer();
         };
 
-        window.handleDelete = (path, skipConfirm = false) => {
+        window.handleDelete = async (path, skipConfirm = false) => {
             hideContextMenu();
             const { item, parent, key } = findItemAndParentByPath(path);
-            if (!item || (!skipConfirm && !confirm(`Are you sure you want to delete "${key}"?`))) return;
+            if (!item) return;
+            
+            const confirmed = skipConfirm ? true : await showConfirm("Xác nhận xóa", `Bạn có chắc muốn xóa "${key}"? Hành động này không thể hoàn tác.`);
+            if (!confirmed) return;
 
             delete parent[key];
 
@@ -747,7 +802,7 @@
             undoStacks = {};
             const userPrompt = document.getElementById('aiPromptInput').value.trim();
             if (!userPrompt) {
-                statusEl.textContent = "Vui lòng nhập yêu cầu cho AI.";
+                showAlert("Thiếu thông tin", "Vui lòng nhập yêu cầu cho AI.");
                 return;
             }
 
@@ -813,6 +868,7 @@ Wrap the final JSON in \`\`\`json ... \`\`\`.`;
             } catch (error) {
                 console.error("Lỗi AI:", error);
                 statusEl.textContent = `Lỗi: ${error.message}`;
+                showAlert("Lỗi AI", error.message);
             } finally {
                 setLoadingState(false);
             }
@@ -862,7 +918,7 @@ Wrap the final JSON in \`\`\`json ... \`\`\`.`;
             });
         }
 
-        function applySingleChange(change) {
+        async function applySingleChange(change) {
             const card = document.getElementById(change.uniqueId);
             if (change.action === 'create') {
                 const parts = change.file.split('/');
@@ -881,13 +937,13 @@ Wrap the final JSON in \`\`\`json ... \`\`\`.`;
                     switchFile(change.file);
                     statusEl.textContent = `Đã tạo tệp ${change.file}`;
                 } else {
-                    alert(`Không thể tạo tệp, thư mục cha "${parentPath}" không tồn tại.`);
+                    await showAlert("Lỗi", `Không thể tạo tệp, thư mục cha "${parentPath}" không tồn tại.`);
                     return;
                 }
             } else { // modify
                 const targetModel = projectModels[change.file];
                 if (!targetModel) {
-                    alert(`Không tìm thấy tệp ${change.file}`);
+                    await showAlert("Lỗi", `Không tìm thấy tệp ${change.file}`);
                     return;
                 }
 
@@ -912,7 +968,7 @@ Wrap the final JSON in \`\`\`json ... \`\`\`.`;
 
                     statusEl.textContent = `Đã cập nhật tệp ${change.file}`;
                 } else {
-                    alert(`Không tìm thấy mã cũ trong tệp ${change.file}`);
+                    await showAlert("Lỗi", `Không tìm thấy mã cũ trong tệp ${change.file}`);
                     return;
                 }
             }
@@ -953,7 +1009,7 @@ Wrap the final JSON in \`\`\`json ... \`\`\`.`;
             const ideaInput = document.getElementById('ideaInput');
             const userIdea = ideaInput.value.trim();
             if (!userIdea) {
-                alert("Vui lòng nhập ý tưởng của bạn.");
+                showAlert("Thiếu thông tin", "Vui lòng nhập ý tưởng của bạn.");
                 return;
             }
 
@@ -970,7 +1026,6 @@ Follow these core principles:
 2.  **Completeness:** Ensure all necessary HTML elements, CSS styles, and JavaScript logic are included to make the application functional from the start.
 3.  **Best Practices:** Instruct the AI to use modern web standards like semantic HTML, clean CSS, and well-structured JavaScript with event listeners.
 4.  **User Experience:** The generated app should be user-friendly with clear labels, buttons, and initial states.
-
 ---
 HERE IS AN EXAMPLE of how to transform an idea into a great prompt.
 **User Idea Example:** "A simple counter app"
@@ -1000,7 +1055,6 @@ Create a functional counter application. This requires changes across multiple f
     * Call \`updateDisplay()\` once at the start to ensure the initial value of 0 is displayed correctly.
 \`\`\`
 ---
-
 Now, based on these principles and the example, generate a similar high-quality initial prompt for the following user's idea. Output only the generated prompt text, without any extra explanations.
 
 **User's Idea:** "${userIdea}"`;
@@ -1019,6 +1073,91 @@ Now, based on these principles and the example, generate a similar high-quality 
             }
         }
 
+        // --- UI Helpers: Modals & Loaders ---
+        const genericModal = document.getElementById('genericModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalContent = document.getElementById('modalContent');
+        const modalActions = document.getElementById('modalActions');
+        const modalCloseBtn = document.getElementById('modalCloseBtn');
+        const fullScreenLoader = document.getElementById('fullScreenLoader');
+        const loaderText = document.getElementById('loaderText');
+
+        function showLoader(text = 'Đang xử lý...') {
+            loaderText.textContent = text;
+            fullScreenLoader.classList.remove('hidden');
+        }
+
+        function hideLoader() {
+            fullScreenLoader.classList.add('hidden');
+        }
+
+        function hideModal() {
+            genericModal.classList.add('hidden');
+            genericModal.querySelector('div').classList.add('scale-95');
+        }
+
+        function showModal(title, contentHTML, actions) {
+            modalTitle.textContent = title;
+            modalContent.innerHTML = contentHTML;
+            modalActions.innerHTML = '';
+            actions.forEach(action => {
+                const button = document.createElement('button');
+                button.textContent = action.text;
+                button.className = action.class;
+                button.onclick = action.handler;
+                modalActions.appendChild(button);
+            });
+            genericModal.classList.remove('hidden');
+            setTimeout(() => genericModal.querySelector('div').classList.remove('scale-95'), 10);
+        }
+
+        function showAlert(title, message) {
+            return new Promise(resolve => {
+                showModal(title, `<p>${message}</p>`, [
+                    { text: 'Đã hiểu', class: 'px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700', handler: () => { hideModal(); resolve(); } }
+                ]);
+            });
+        }
+
+        function showConfirm(title, message) {
+            return new Promise(resolve => {
+                const cancelHandler = () => { hideModal(); resolve(false); };
+                const confirmHandler = () => { hideModal(); resolve(true); };
+                
+                showModal(title, `<p>${message}</p>`, [
+                    { text: 'Hủy', class: 'px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300', handler: cancelHandler },
+                    { text: 'Xác nhận', class: 'px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700', handler: confirmHandler }
+                ]);
+                modalCloseBtn.onclick = cancelHandler;
+            });
+        }
+
+        function showPrompt(title, label, defaultValue = '') {
+            return new Promise(resolve => {
+                const content = `<label for="modalInput" class="block text-sm font-medium text-gray-700">${label}</label>
+                                 <input type="text" id="modalInput" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" value="${defaultValue}">`;
+                
+                const cancelHandler = () => { hideModal(); resolve(null); };
+                const confirmHandler = () => {
+                    const value = document.getElementById('modalInput').value;
+                    hideModal();
+                    resolve(value);
+                };
+
+                showModal(title, content, [
+                    { text: 'Hủy', class: 'px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300', handler: cancelHandler },
+                    { text: 'OK', class: 'px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700', handler: confirmHandler }
+                ]);
+                
+                const input = document.getElementById('modalInput');
+                input.focus();
+                input.select();
+                input.onkeydown = (e) => { if (e.key === 'Enter') confirmHandler(); };
+                modalCloseBtn.onclick = cancelHandler;
+            });
+        }
+
+
         // --- Event Listeners ---
         function attachAppEventListeners() {
             document.getElementById('logout-btn').addEventListener('click', () => {
@@ -1030,7 +1169,11 @@ Now, based on these principles and the example, generate a similar high-quality 
             document.getElementById('load-project-btn').addEventListener('click', loadProjects);
             document.getElementById('closeLoadModalBtn').addEventListener('click', () => document.getElementById('loadProjectModal').classList.add('hidden'));
             fileExplorer.addEventListener('contextmenu', showContextMenu);
-            document.addEventListener('click', hideContextMenu);
+            document.addEventListener('click', (e) => {
+                if (!contextMenu.contains(e.target)) {
+                    hideContextMenu();
+                }
+            });
             openModalBtn.addEventListener('click', () => {
                 previewModal.classList.remove('hidden');
                 updatePreview();
@@ -1044,18 +1187,19 @@ Now, based on these principles and the example, generate a similar high-quality 
             openIdeaModalBtn.addEventListener('click', () => ideaModal.classList.remove('hidden'));
             closeIdeaModalBtn.addEventListener('click', () => ideaModal.classList.add('hidden'));
             generatePromptBtn.addEventListener('click', generateInitialPrompt);
-            copyAndPasteBtn.addEventListener('click', () => {
+            copyAndPasteBtn.addEventListener('click', async () => {
                 const output = document.getElementById('generatedPromptOutput');
                 const mainInput = document.getElementById('aiPromptInput');
                 output.select();
                 document.execCommand('copy');
                 mainInput.value = output.value;
                 ideaModal.classList.add('hidden');
-                alert('Đã sao chép & dán kế hoạch vào ô Điều khiển!');
+                await showAlert('Thành công', 'Đã sao chép & dán kế hoạch vào ô Điều khiển!');
             });
             runAiBtn.addEventListener('click', getAiSuggestion);
-            document.getElementById('new-project-btn').addEventListener('click', () => {
-                if (confirm("Bạn có chắc muốn tạo một dự án mới? Mọi thay đổi chưa lưu sẽ bị mất.")) {
+            document.getElementById('new-project-btn').addEventListener('click', async () => {
+                const confirmed = await showConfirm("Tạo dự án mới", "Bạn có chắc muốn tạo một dự án mới? Mọi thay đổi chưa lưu sẽ bị mất.");
+                if (confirmed) {
                     loadInitialProject();
                 }
             });
