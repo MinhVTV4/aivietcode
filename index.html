@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototype Động - Sửa code bất kỳ với AI (v23.0 - Diff Editor)</title>
+    <title>Prototype Động - Sửa code bất kỳ với AI (v24.0 - AI Explanation)</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
@@ -171,12 +171,12 @@
     
     <!-- Generic Modal -->
     <div id="genericModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-gray-900 bg-opacity-75 transition-opacity duration-300">
-        <div class="bg-white rounded-lg shadow-xl w-full max-w-md flex flex-col transform scale-95 transition-transform duration-300">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-lg flex flex-col transform scale-95 transition-transform duration-300">
             <div class="flex justify-between items-center p-4 border-b">
                 <h3 id="modalTitle" class="text-xl font-semibold text-gray-800"></h3>
                 <button id="modalCloseBtn" class="text-gray-400 hover:text-gray-600">&times;</button>
             </div>
-            <div id="modalContent" class="p-6 space-y-4">
+            <div id="modalContent" class="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
                 <!-- Content will be injected here by JS -->
             </div>
             <div id="modalActions" class="flex justify-end p-4 bg-gray-50 border-t rounded-b-lg space-x-3">
@@ -824,10 +824,11 @@ USER'S REQUEST:
 "${userPrompt}"
 TASK:
 Generate a JSON object with a "changes" array containing a single modification object.
-- The "action" must be "modify".
-- The "file" must be "${activeFilePath}".
-- The "oldCode" MUST be the entire original code snippet provided.
-- The "newCode" MUST be the complete, modified version of the snippet.
+- "action" must be "modify".
+- "file" must be "${activeFilePath}".
+- "reasoning" must be a DETAILED explanation in VIETNAMESE about why the change is necessary and what it improves.
+- "oldCode" MUST be the entire original code snippet provided.
+- "newCode" MUST be the complete, modified version of the snippet.
 **CRITICAL JSON FORMATTING RULES:**
 - All values must be valid JSON strings (newlines escaped as \\n, quotes as \\").
 Wrap the final JSON in \`\`\`json ... \`\`\`.`;
@@ -843,8 +844,8 @@ CURRENT USER'S REQUEST:
 "${userPrompt}"
 TASK:
 Generate a JSON object with a "changes" array. Each object in the array represents an action:
-- For MODIFICATIONS: { "action": "modify", "file": "path/to/file.ext", "description": "...", "oldCode": "...", "newCode": "..." }
-- For NEW FILES: { "action": "create", "file": "path/to/new_file.ext", "description": "...", "newCode": "..." }
+- For MODIFICATIONS: { "action": "modify", "file": "path/to/file.ext", "description": "...", "reasoning": "A detailed explanation in VIETNAMESE...", "oldCode": "...", "newCode": "..." }
+- For NEW FILES: { "action": "create", "file": "path/to/new_file.ext", "description": "...", "reasoning": "A detailed explanation in VIETNAMESE about the purpose of this new file...", "newCode": "..." }
 **CRITICAL JSON FORMATTING RULES:**
 - All values MUST be valid JSON strings (newlines escaped as \\n, quotes as \\").
 Wrap the final JSON in \`\`\`json ... \`\`\`.`;
@@ -900,17 +901,33 @@ Wrap the final JSON in \`\`\`json ... \`\`\`.`;
                                       <div id="diff-container-${change.uniqueId}" class="mt-2 w-full h-64 border border-gray-300 rounded-md"></div>`;
                 }
                 
-                const applyButtonContainer = document.createElement('div');
-                applyButtonContainer.className = 'apply-buttons mt-4';
-                applyButtonContainer.innerHTML = `<button class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg">Áp dụng</button>`;
-                applyButtonContainer.querySelector('button').addEventListener('click', () => applySingleChange(change));
+                // --- Action Buttons ---
+                const buttonContainer = document.createElement('div');
+                buttonContainer.className = 'mt-4 flex flex-col sm:flex-row gap-2';
+
+                const applyButton = document.createElement('button');
+                applyButton.className = 'apply-button w-full sm:w-auto flex-grow bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg';
+                applyButton.textContent = 'Áp dụng';
+                applyButton.onclick = () => applySingleChange(change);
                 
+                const explainButton = document.createElement('button');
+                explainButton.className = 'explain-button w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg';
+                explainButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline-block mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" /></svg>Xem giải thích`;
+                explainButton.onclick = () => showAlert('Giải thích của AI', change.reasoning || 'AI không cung cấp giải thích cho thay đổi này.');
+
+                buttonContainer.appendChild(applyButton);
+                buttonContainer.appendChild(explainButton);
+                
+                const applyButtonWrapper = document.createElement('div');
+                applyButtonWrapper.className = 'apply-buttons';
+                applyButtonWrapper.appendChild(buttonContainer);
+
                 const undoButtonContainer = document.createElement('div');
                 undoButtonContainer.className = 'undo-buttons mt-4 hidden';
                 undoButtonContainer.innerHTML = `<button class="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg">[↶] Hoàn tác</button>`;
                 undoButtonContainer.querySelector('button').addEventListener('click', () => undoChange(change.uniqueId));
 
-                card.appendChild(applyButtonContainer);
+                card.appendChild(applyButtonWrapper);
                 card.appendChild(undoButtonContainer);
                 aiResponseContainer.appendChild(card);
 
@@ -1145,7 +1162,7 @@ Now, based on these principles and the example, generate a similar high-quality 
 
         function showAlert(title, message) {
             return new Promise(resolve => {
-                showModal(title, `<p>${message}</p>`, [
+                showModal(title, `<p class="text-gray-700 whitespace-pre-wrap">${message}</p>`, [
                     { text: 'Đã hiểu', class: 'px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700', handler: () => { hideModal(); resolve(); } }
                 ]);
             });
