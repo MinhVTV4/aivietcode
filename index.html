@@ -3,147 +3,102 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototype Động - Sửa code bất kỳ với AI (v19.3 - Sửa lỗi Tạo tệp)</title>
+    <title>Prototype Động - Sửa code bất kỳ với AI (v21.2 - Hoàn thiện)</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
     
     <style>
-        body { 
-            font-family: 'Inter', sans-serif; 
-        }
-        .spinner {
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            border-left-color: #fff;
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            animation: spin 1s linear infinite;
-        }
+        body { font-family: 'Inter', sans-serif; }
+        .spinner { border: 3px solid rgba(255, 255, 255, 0.3); border-left-color: #fff; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
         .hidden { display: none; }
-        
+        .file-explorer-item { display: flex; align-items: center; padding: 4px 8px; cursor: pointer; border-radius: 4px; user-select: none; }
+        .file-explorer-item:hover { background-color: #eef2ff; }
+        .file-explorer-item.active { background-color: #c7d2fe; }
+        .file-explorer-item svg { width: 16px; height: 16px; margin-right: 8px; flex-shrink: 0; }
+        .folder-arrow { transition: transform 0.1s linear; }
+        .folder-arrow.open { transform: rotate(90deg); }
+        #contextMenu { position: absolute; z-index: 1000; background-color: white; border: 1px solid #e5e7eb; border-radius: 0.375rem; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); padding: 0.5rem 0; min-width: 150px; }
+        .context-menu-item { display: block; width: 100%; padding: 0.5rem 1rem; font-size: 0.875rem; text-align: left; }
+        .context-menu-item:hover { background-color: #f3f4f6; }
         .code-old { color: #B91C1C; }
         .code-new { color: #047857; }
-        
-        #previewFrame { 
-            border: 1px solid #d1d5db; 
-            border-radius: 0.5rem; 
-        }
-        
-        .file-explorer-item {
-            display: flex;
-            align-items: center;
-            padding: 4px 8px;
-            cursor: pointer;
-            border-radius: 4px;
-            user-select: none;
-        }
-        .file-explorer-item:hover {
-            background-color: #eef2ff;
-        }
-        .file-explorer-item.active {
-            background-color: #c7d2fe;
-        }
-        .file-explorer-item svg {
-            width: 16px;
-            height: 16px;
-            margin-right: 8px;
-            flex-shrink: 0;
-        }
-        .folder-arrow {
-            transition: transform 0.1s linear;
-        }
-        .folder-arrow.open {
-            transform: rotate(90deg);
-        }
-
-        #contextMenu {
-            position: absolute;
-            z-index: 1000;
-            background-color: white;
-            border: 1px solid #e5e7eb;
-            border-radius: 0.375rem;
-            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-            padding: 0.5rem 0;
-            min-width: 150px;
-        }
-        .context-menu-item {
-            display: block;
-            width: 100%;
-            padding: 0.5rem 1rem;
-            font-size: 0.875rem;
-            text-align: left;
-        }
-        .context-menu-item:hover {
-            background-color: #f3f4f6;
-        }
-        .context-menu-separator {
-            height: 1px;
-            background-color: #e5e7eb;
-            margin: 0.5rem 0;
-        }
-        .change-group-header {
-            font-weight: 600;
-            margin-top: 1rem;
-            padding-bottom: 0.5rem;
-            border-bottom: 1px solid #e5e7eb;
-        }
+        .change-group-header { font-weight: 600; margin-top: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #e5e7eb; }
     </style>
 </head>
-<body class="p-4 md:p-8 bg-gray-100 text-gray-900">
+<body class="bg-gray-100">
 
-    <div class="max-w-screen-2xl mx-auto bg-white p-6 md:p-8 rounded-xl shadow-xl">
-        <header class="mb-6 pb-4 border-b border-gray-200">
-            <h1 class="text-3xl font-bold text-gray-800">Prototype Động: Sửa Code Bất Kỳ Với AI</h1>
-            <p class="mt-2 text-gray-600">
-                Quản lý tệp và thư mục của bạn một cách linh hoạt.
-            </p>
-        </header>
-
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <!-- Cột 1: Trình soạn thảo -->
-            <div class="flex flex-col">
-                <h2 class="text-xl font-semibold text-gray-700 mb-2">1. Dự án</h2>
-                <div class="flex flex-grow border border-gray-300 rounded-lg shadow-md min-h-[600px]">
-                    <div id="fileExplorer" class="w-1/3 max-w-xs bg-gray-50 p-2 border-r border-gray-300 overflow-y-auto"></div>
-                    <div id="editorContainer" class="flex-grow"></div>
+    <!-- Auth Screen -->
+    <div id="auth-screen" class="min-h-screen flex items-center justify-center">
+        <div class="max-w-md w-full bg-white p-8 rounded-xl shadow-lg">
+            <h2 class="text-2xl font-bold text-center text-gray-800 mb-6">Đăng nhập / Đăng ký</h2>
+            <div id="auth-error" class="text-red-500 text-sm mb-4 text-center h-4"></div>
+            <div class="space-y-4">
+                <input id="email-input" type="email" placeholder="Email" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <input id="password-input" type="password" placeholder="Mật khẩu" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <div class="flex gap-4">
+                    <button id="login-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg">Đăng nhập</button>
+                    <button id="register-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg">Đăng ký</button>
                 </div>
             </div>
+        </div>
+    </div>
 
-            <!-- Cột 2: AI và các chức năng khác -->
-             <div class="flex flex-col">
-                <div class="bg-indigo-50 p-6 rounded-lg border border-indigo-200 h-full">
-                    <div class="flex justify-between items-center">
-                        <h2 class="text-xl font-semibold text-gray-700">2. Điều khiển AI</h2>
-                        <button id="openIdeaModalBtn" title="Khởi tạo Dự án từ Ý tưởng" class="bg-yellow-400 hover:bg-yellow-500 text-gray-800 font-bold p-2 rounded-full shadow-md transition duration-300">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                <path d="M10 2a1 1 0 011 1v1.01a5.002 5.002 0 014.37 4.373H16a1 1 0 110 2h-1.01a5.002 5.002 0 01-4.37 4.373V17a1 1 0 11-2 0v-1.01a5.002 5.002 0 01-4.37-4.373H4a1 1 0 110-2h1.01A5.002 5.002 0 019.38 3.01V2a1 1 0 011-1zM4 10a6 6 0 1112 0 6 6 0 01-12 0z" />
-                            </svg>
-                        </button>
+    <!-- Main Application (hidden by default) -->
+    <div id="main-app" class="hidden p-4 md:p-8">
+        <div class="max-w-screen-2xl mx-auto bg-white p-6 md:p-8 rounded-xl shadow-xl">
+            <header class="mb-6 pb-4 border-b border-gray-200 flex justify-between items-center">
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-800">Prototype Động: <span id="project-name-display">Dự án Mới</span></h1>
+                    <p id="user-email" class="text-sm text-gray-500 mt-1"></p>
+                </div>
+                <div class="flex gap-2">
+                    <button id="new-project-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg">Dự án Mới</button>
+                    <button id="save-project-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Lưu dự án</button>
+                    <button id="load-project-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">Mở dự án</button>
+                    <button id="logout-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg">Đăng xuất</button>
+                </div>
+            </header>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <!-- Cột 1: Trình soạn thảo -->
+                <div class="flex flex-col">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-2">1. Dự án</h2>
+                    <div class="flex flex-grow border border-gray-300 rounded-lg shadow-md min-h-[600px]">
+                        <div id="fileExplorer" class="w-1/3 max-w-xs bg-gray-50 p-2 border-r border-gray-300 overflow-y-auto"></div>
+                        <div id="editorContainer" class="flex-grow"></div>
                     </div>
-                    <p class="text-sm text-gray-500 mb-4">Nhập yêu cầu của bạn, hoặc dùng Trợ lý Khởi tạo (💡) để bắt đầu.</p>
-                    <textarea id="aiPromptInput" class="w-full p-2 border rounded-md focus:ring-indigo-500 focus:border-indigo-500" rows="5" placeholder="Ví dụ: Tạo một file alert.js trong thư mục js, sau đó gọi nó từ script.js"></textarea>
-                    
-                    <div class="flex gap-2 mt-4">
-                        <button id="runAiBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-5 rounded-lg shadow-md transition duration-300 opacity-50 cursor-not-allowed flex items-center justify-center" disabled>
+                </div>
+
+                <!-- Cột 2: AI và các chức năng khác -->
+                <div class="flex flex-col">
+                    <div class="bg-indigo-50 p-6 rounded-lg border border-indigo-200 h-full">
+                         <div class="flex justify-between items-center">
+                            <h2 class="text-xl font-semibold text-gray-700">2. Điều khiển AI</h2>
+                            <button id="openIdeaModalBtn" title="Khởi tạo Dự án từ Ý tưởng" class="bg-yellow-400 hover:bg-yellow-500 text-gray-800 font-bold p-2 rounded-full shadow-md transition duration-300">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a1 1 0 011 1v1.01a5.002 5.002 0 014.37 4.373H16a1 1 0 110 2h-1.01a5.002 5.002 0 01-4.37 4.373V17a1 1 0 11-2 0v-1.01a5.002 5.002 0 01-4.37-4.373H4a1 1 0 110-2h1.01A5.002 5.002 0 019.38 3.01V2a1 1 0 011-1zM4 10a6 6 0 1112 0 6 6 0 01-12 0z" /></svg>
+                            </button>
+                        </div>
+                        <p class="text-sm text-gray-500 mb-4">Nhập yêu cầu của bạn, hoặc dùng Trợ lý Khởi tạo (💡) để bắt đầu.</p>
+                        <textarea id="aiPromptInput" class="w-full p-2 border rounded-md" rows="5"></textarea>
+                        <button id="runAiBtn" class="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-5 rounded-lg flex items-center justify-center">
                             <span id="buttonText">Gửi yêu cầu AI</span>
                             <div id="buttonSpinner" class="spinner hidden ml-3"></div>
                         </button>
+                        <h2 class="text-xl font-semibold text-gray-700 mt-8 mb-2">3. Đề xuất của AI</h2>
+                        <div id="aiResponseContainer" class="h-96 overflow-y-auto">
+                            <p id="aiResponsePlaceholder" class="text-gray-500">Đề xuất của AI sẽ xuất hiện ở đây...</p>
+                        </div>
+                        <h2 class="text-xl font-semibold text-gray-700 mt-8 mb-2">4. Trạng thái</h2>
+                        <div id="status" class="w-full bg-white p-4 rounded-md shadow-inner border text-gray-600 min-h-[50px]"></div>
                     </div>
-                    <h2 class="text-xl font-semibold text-gray-700 mt-8 mb-2">3. Đề xuất của AI</h2>
-                    <div id="aiResponseContainer" class="h-96 overflow-y-auto">
-                        <p id="aiResponsePlaceholder" class="text-gray-500">Đề xuất của AI sẽ xuất hiện ở đây...</p>
-                    </div>
-                    <h2 class="text-xl font-semibold text-gray-700 mt-8 mb-2">4. Trạng thái</h2>
-                    <div id="status" class="w-full bg-white p-4 rounded-md shadow-inner border text-gray-600 min-h-[50px]"></div>
                 </div>
-            </div>
-
-            <!-- Cột 3: Xem trước (Preview) -->
-            <div class="flex flex-col lg:col-span-2 mt-8"> 
-                <h2 class="text-xl font-semibold text-gray-700 mb-2">5. Xem trước trực quan</h2>
-                <button id="openModalBtn" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg shadow-md">Xem trước</button>
+                 <!-- Cột 3: Xem trước (Preview) -->
+                <div class="flex flex-col lg:col-span-2 mt-8"> 
+                    <h2 class="text-xl font-semibold text-gray-700 mb-2">5. Xem trước trực quan</h2>
+                    <button id="openModalBtn" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg shadow-md">Xem trước</button>
+                </div>
             </div>
         </div>
     </div>
@@ -153,50 +108,52 @@
         <div class="relative w-full h-[90vh] max-w-7xl mx-auto p-4 flex flex-col">
             <div class="relative bg-white rounded-lg shadow-xl flex flex-col flex-grow">
                 <button type="button" id="closeModalBtn" class="absolute top-3 right-2.5 text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm p-1.5 ml-auto inline-flex items-center">
-                    <svg aria-hidden="true" class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
                 </button>
                 <div class="p-6 flex flex-col flex-grow">
                     <div id="previewControls" class="flex justify-center mb-4 space-x-4">
-                        <button id="desktopViewBtn" class="px-5 py-2 rounded-lg shadow-md transition duration-300 font-medium text-sm">Desktop</button>
-                        <button id="mobileViewBtn" class="px-5 py-2 rounded-lg shadow-md transition duration-300 font-medium text-sm">Mobile</button>
+                        <button id="desktopViewBtn" class="px-5 py-2 rounded-lg shadow-md">Desktop</button>
+                        <button id="mobileViewBtn" class="px-5 py-2 rounded-lg shadow-md">Mobile</button>
                     </div>
                     <div id="previewFrameContainer" class="flex-grow flex justify-center items-center overflow-auto bg-gray-50 rounded-lg p-4">
-                        <iframe id="previewFrame" title="Visual Preview" class="border border-gray-300 rounded-lg shadow-md transition-all duration-300 ease-in-out"></iframe>
+                        <iframe id="previewFrame" title="Visual Preview" class="border border-gray-300 rounded-lg shadow-md"></iframe>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-
     <div id="ideaModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-75">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl flex flex-col">
             <div class="flex justify-between items-center p-4 border-b">
                 <h3 class="text-xl font-semibold text-gray-800">Trợ lý Khởi tạo Dự án</h3>
-                <button id="closeIdeaModalBtn" class="text-gray-400 hover:text-gray-600">
-                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
-                </button>
+                <button id="closeIdeaModalBtn" class="text-gray-400 hover:text-gray-600">&times;</button>
             </div>
             <div class="p-6 space-y-4">
-                <div>
-                    <label for="ideaInput" class="block mb-2 text-sm font-medium text-gray-700">Nhập ý tưởng của bạn vào đây:</label>
-                    <textarea id="ideaInput" rows="3" class="w-full p-2 border rounded-md" placeholder="Ví dụ: ứng dụng web về mô phỏng thí nghiệm hóa học"></textarea>
-                </div>
+                <textarea id="ideaInput" rows="3" class="w-full p-2 border rounded-md" placeholder="Ví dụ: ứng dụng web về mô phỏng thí nghiệm hóa học"></textarea>
                 <button id="generatePromptBtn" class="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center">
-                    <span id="generateBtnText">Tạo Kế hoạch Chi tiết</span>
+                    <span id="generateBtnText">Tạo Kế hoạch</span>
                     <div id="generateSpinner" class="spinner hidden ml-3"></div>
                 </button>
-                <div>
-                    <label for="generatedPromptOutput" class="block mb-2 text-sm font-medium text-gray-700">Kế hoạch đề xuất (Lời nhắc khởi tạo):</label>
-                    <textarea id="generatedPromptOutput" rows="10" class="w-full p-2 border rounded-md bg-gray-50" readonly placeholder="AI sẽ tạo một lời nhắc chi tiết tại đây..."></textarea>
-                </div>
-                <button id="copyAndPasteBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Sao chép & Dán vào ô Điều khiển</button>
+                <textarea id="generatedPromptOutput" rows="10" class="w-full p-2 border rounded-md bg-gray-50" readonly></textarea>
+                <button id="copyAndPasteBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Sao chép & Dán</button>
             </div>
+        </div>
+    </div>
+    <div id="loadProjectModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-75">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl">
+            <div class="flex justify-between items-center p-4 border-b">
+                <h3 id="load-modal-title" class="text-xl font-semibold text-gray-800">Mở Dự án</h3>
+                <button id="closeLoadModalBtn" class="text-gray-400 hover:text-gray-600">&times;</button>
+            </div>
+            <div id="load-modal-content" class="p-6 max-h-96 overflow-y-auto"></div>
         </div>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-app.js";
         import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-ai.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, getDocs, doc, getDoc, query, where, orderBy, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyDt6KZTLJ5ItNShxAPlpKKHC8eHiIBSjmY",
@@ -207,25 +164,20 @@
             appId: "1:277847908656:web:77eb210b8e2b2b7dbca8f5"
         };
 
-        // --- Data & State ---
-        let monacoEditor;
-        let aiModel;
+        // --- App State ---
+        let monacoEditor, aiModel, auth, db;
         let activeFilePath = 'index.html';
-        let conversationHistory = [];
-        let undoStacks = {};
-
-        let projectStructure = {
-            'index.html': { type: 'file' },
-            'src': {
-                type: 'folder', isOpen: true, children: {
-                    'css': { type: 'folder', isOpen: true, children: { 'style.css': { type: 'file' } } },
-                    'js': { type: 'folder', isOpen: true, children: { 'script.js': { type: 'file' } } }
-                }
-            }
-        };
+        let projectStructure = {};
         let projectModels = {};
+        let currentUser = null;
+        let isEditorInitialized = false;
+        let undoStacks = {};
+        let currentProjectId = null;
+        let currentProjectName = null;
 
-        // DOM Elements
+        // --- DOM Elements ---
+        const authScreen = document.getElementById('auth-screen');
+        const mainApp = document.getElementById('main-app');
         const fileExplorer = document.getElementById('fileExplorer');
         const editorContainer = document.getElementById('editorContainer');
         const contextMenu = document.getElementById('contextMenu');
@@ -244,7 +196,274 @@
         const generatePromptBtn = document.getElementById('generatePromptBtn');
         const copyAndPasteBtn = document.getElementById('copyAndPasteBtn');
 
-        // --- Core Logic ---
+        // --- Firebase Initialization ---
+        const app = initializeApp(firebaseConfig);
+        auth = getAuth(app);
+        db = getFirestore(app);
+        
+        // --- Auth Logic ---
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                authScreen.classList.add('hidden');
+                mainApp.classList.remove('hidden');
+                document.getElementById('user-email').textContent = `Chào, ${user.email}`;
+                if (!isEditorInitialized) {
+                    initializeEditorAndAI();
+                }
+            } else {
+                currentUser = null;
+                authScreen.classList.remove('hidden');
+                mainApp.classList.add('hidden');
+            }
+        });
+        
+        // --- Editor & App Initialization ---
+        function initializeEditorAndAI() {
+            statusEl.textContent = "Đang khởi tạo trình soạn thảo...";
+            require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' }});
+            require(['vs/editor/editor.main'], () => {
+                loadInitialProject();
+                monacoEditor = monaco.editor.create(editorContainer, {
+                    model: projectModels[activeFilePath],
+                    theme: 'vs-light',
+                    automaticLayout: true
+                });
+                renderFileExplorer();
+                updatePreview();
+                attachAppEventListeners();
+                
+                try {
+                    aiModel = getGenerativeModel(getAI(app), { model: "gemini-2.5-flash" });
+                    statusEl.textContent = "Hệ thống đã sẵn sàng.";
+                } catch (e) {
+                    statusEl.textContent = `Lỗi khởi tạo AI: ${e.message}`;
+                }
+                isEditorInitialized = true;
+            });
+        }
+
+        function loadInitialProject() {
+            Object.values(projectModels).forEach(model => model.dispose());
+            projectModels = {};
+            currentProjectId = null;
+            currentProjectName = "Dự án Mới";
+            updateProjectDisplay();
+
+            projectStructure = {
+                'index.html': { type: 'file' },
+                'src': { type: 'folder', isOpen: true, children: {
+                    'css': { type: 'folder', isOpen: true, children: { 'style.css': { type: 'file' } } },
+                    'js': { type: 'folder', isOpen: true, children: { 'script.js': { type: 'file' } } }
+                }}
+            };
+            const sampleFiles = {
+                'index.html': `<!DOCTYPE html>\n<html lang="en">\n<head>\n    <title>Dự án Mới</title>\n    <link rel="stylesheet" href="src/css/style.css">\n</head>\n<body>\n    <h1>Chào mừng!</h1>\n    <script src="src/js/script.js"><\/script>\n</body>\n</html>`,
+                'src/css/style.css': `body {\n    font-family: sans-serif;\n}`,
+                'src/js/script.js': `console.log("Hello World!");`
+            };
+            createModelsFromStructure(projectStructure, sampleFiles);
+            activeFilePath = 'index.html';
+            if(monacoEditor) {
+                monacoEditor.setModel(projectModels[activeFilePath]);
+                renderFileExplorer();
+                updatePreview();
+            }
+        }
+
+        // --- Firestore Logic ---
+        async function saveProject() {
+            const files = {};
+            Object.entries(projectModels).forEach(([path, model]) => {
+                files[path] = model.getValue();
+            });
+
+            if (currentProjectId) {
+                // Save a new version
+                const commitMessage = prompt("Nhập ghi chú cho phiên bản này (ví dụ: 'Thêm nút đăng nhập'):", "");
+                if (commitMessage === null) return;
+
+                statusEl.textContent = "Đang lưu phiên bản mới...";
+                try {
+                    const projectRef = doc(db, "projects", currentProjectId);
+                    const projectSnap = await getDoc(projectRef);
+                    const currentVersion = projectSnap.data().latestVersion || 0;
+                    const newVersionNumber = currentVersion + 1;
+
+                    const versionRef = collection(db, "projects", currentProjectId, "versions");
+                    await addDoc(versionRef, {
+                        versionNumber: newVersionNumber,
+                        commitMessage: commitMessage,
+                        structure: JSON.stringify(projectStructure),
+                        files: files,
+                        createdAt: serverTimestamp()
+                    });
+
+                    await updateDoc(projectRef, {
+                        latestVersion: newVersionNumber,
+                        lastUpdatedAt: serverTimestamp()
+                    });
+                    
+                    statusEl.textContent = `Đã lưu phiên bản ${newVersionNumber} cho dự án "${currentProjectName}".`;
+
+                } catch (error) {
+                    console.error("Lỗi khi lưu phiên bản mới:", error);
+                    statusEl.textContent = "Lỗi khi lưu phiên bản mới.";
+                }
+
+            } else {
+                // Save a new project
+                const projectName = prompt("Nhập tên dự án mới:");
+                if (!projectName) return;
+
+                statusEl.textContent = "Đang tạo dự án mới...";
+                try {
+                    const projectRef = await addDoc(collection(db, "projects"), {
+                        uid: currentUser.uid,
+                        name: projectName,
+                        createdAt: serverTimestamp(),
+                        lastUpdatedAt: serverTimestamp(),
+                        latestVersion: 1
+                    });
+
+                    const versionRef = collection(db, "projects", projectRef.id, "versions");
+                    await addDoc(versionRef, {
+                        versionNumber: 1,
+                        commitMessage: "Phiên bản đầu tiên",
+                        structure: JSON.stringify(projectStructure),
+                        files: files,
+                        createdAt: serverTimestamp()
+                    });
+
+                    currentProjectId = projectRef.id;
+                    currentProjectName = projectName;
+                    updateProjectDisplay();
+                    statusEl.textContent = `Đã tạo và lưu dự án "${projectName}" thành công.`;
+
+                } catch (error) {
+                    console.error("Lỗi khi tạo dự án mới:", error);
+                    statusEl.textContent = "Lỗi khi tạo dự án mới.";
+                }
+            }
+        }
+
+        async function loadProjects() {
+            const modalContent = document.getElementById('load-modal-content');
+            modalContent.innerHTML = '<div class="spinner"></div>';
+            document.getElementById('load-modal-title').textContent = "Mở Dự án";
+            document.getElementById('loadProjectModal').classList.remove('hidden');
+
+            const q = query(collection(db, "projects"), where("uid", "==", currentUser.uid), orderBy("lastUpdatedAt", "desc"));
+            const querySnapshot = await getDocs(q);
+            
+            modalContent.innerHTML = '';
+            if (querySnapshot.empty) {
+                modalContent.textContent = "Bạn chưa có dự án nào.";
+                return;
+            }
+            querySnapshot.forEach((doc) => {
+                const project = doc.data();
+                const div = document.createElement('div');
+                div.className = "p-2 hover:bg-gray-100 cursor-pointer rounded";
+                div.textContent = project.name;
+                div.onclick = () => showProjectVersions(doc.id, project.name);
+                modalContent.appendChild(div);
+            });
+        }
+
+        async function showProjectVersions(projectId, projectName) {
+            const modalContent = document.getElementById('load-modal-content');
+            modalContent.innerHTML = '<div class="spinner"></div>';
+            document.getElementById('load-modal-title').textContent = `Phiên bản của "${projectName}"`;
+            
+            const backButton = document.createElement('button');
+            backButton.className = "mb-4 text-sm text-indigo-600 hover:underline";
+            backButton.textContent = "← Quay lại danh sách dự án";
+            backButton.onclick = loadProjects;
+            
+            const versionsList = document.createElement('div');
+            
+            modalContent.innerHTML = '';
+            modalContent.appendChild(backButton);
+            modalContent.appendChild(versionsList);
+            
+            const q = query(collection(db, "projects", projectId, "versions"), orderBy("versionNumber", "desc"));
+            const querySnapshot = await getDocs(q);
+            
+            if (querySnapshot.empty) {
+                versionsList.textContent = "Dự án này chưa có phiên bản nào.";
+                return;
+            }
+            querySnapshot.forEach((doc) => {
+                const version = doc.data();
+                const div = document.createElement('div');
+                div.className = "p-2 hover:bg-gray-100 cursor-pointer rounded border-b";
+                div.innerHTML = `
+                    <p class="font-semibold">Phiên bản ${version.versionNumber}</p>
+                    <p class="text-sm text-gray-600">${version.commitMessage}</p>
+                    <p class="text-xs text-gray-400">${version.createdAt ? version.createdAt.toDate().toLocaleString() : 'N/A'}</p>
+                `;
+                div.onclick = () => openProjectVersion(projectId, projectName, doc.id);
+                versionsList.appendChild(div);
+            });
+        }
+
+        async function openProjectVersion(projectId, projectName, versionId) {
+            statusEl.textContent = `Đang mở dự án...`;
+            document.getElementById('loadProjectModal').classList.add('hidden');
+            const docRef = doc(db, "projects", projectId, "versions", versionId);
+            const docSnap = await getDoc(docRef);
+
+            if (docSnap.exists()) {
+                const versionData = docSnap.data();
+                Object.values(projectModels).forEach(model => model.dispose());
+                projectModels = {};
+
+                projectStructure = JSON.parse(versionData.structure);
+                createModelsFromStructure(projectStructure, versionData.files);
+                
+                currentProjectId = projectId;
+                currentProjectName = projectName;
+                updateProjectDisplay();
+
+                activeFilePath = 'index.html';
+                monacoEditor.setModel(projectModels[activeFilePath]);
+                renderFileExplorer();
+                updatePreview();
+                statusEl.textContent = `Đã mở dự án "${projectName}", phiên bản ${versionData.versionNumber}.`;
+            } else {
+                statusEl.textContent = "Không tìm thấy phiên bản dự án.";
+            }
+        }
+        
+        function updateProjectDisplay() {
+            document.getElementById('project-name-display').textContent = currentProjectName;
+            const saveBtn = document.getElementById('save-project-btn');
+            if (currentProjectId) {
+                saveBtn.textContent = "Lưu phiên bản mới";
+            } else {
+                saveBtn.textContent = "Lưu dự án";
+            }
+        }
+
+        // --- Helper Functions ---
+        function createModelsFromStructure(structure, files, pathPrefix = '') {
+            Object.entries(structure).forEach(([name, item]) => {
+                const currentPath = pathPrefix ? `${pathPrefix}/${name}` : name;
+                if (item.type === 'file') {
+                    const model = monaco.editor.createModel(
+                        files[currentPath] || "",
+                        getLanguageForFile(currentPath)
+                    );
+                    model.onDidChangeContent(updatePreview);
+                    projectModels[currentPath] = model;
+                } else if (item.children) {
+                    createModelsFromStructure(item.children, files, currentPath);
+                }
+            });
+        }
+        
+        // --- Core Logic & File Management ---
         function getLanguageForFile(filename) {
             const extension = filename.split('.').pop();
             switch (extension) {
@@ -287,7 +506,6 @@
             return { item: currentItem };
         }
         
-        // --- File Explorer & Context Menu ---
         function renderFileExplorer() {
             fileExplorer.innerHTML = '';
             const rootUl = document.createElement('ul');
@@ -757,85 +975,70 @@ Now, based on these principles and the example, generate a similar high-quality 
             }
         }
 
-        // --- Initialization ---
-        window.onload = function() {
-            statusEl.textContent = "Đang khởi tạo trình soạn thảo...";
-            
-            require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' }});
-            require(['vs/editor/editor.main'], function() {
-                const sampleFiles = {
-                    'index.html': `<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <title>Dự án Mẫu</title>\n    <link rel="stylesheet" href="src/css/style.css">\n</head>\n<body>\n    <h1>Chào mừng!</h1>\n    <script src="src/js/script.js"><\/script>\n</body>\n</html>`,
-                    'src/css/style.css': `body {\n    font-family: sans-serif;\n}`,
-                    'src/js/script.js': `console.log("Hello World!");`
-                };
-
-                function createModelsFromStructure(structure, pathPrefix = '') {
-                    Object.entries(structure).forEach(([name, item]) => {
-                        const currentPath = pathPrefix ? `${pathPrefix}/${name}` : name;
-                        if (item.type === 'file') {
-                            const model = monaco.editor.createModel(
-                                sampleFiles[currentPath] || "",
-                                getLanguageForFile(currentPath)
-                            );
-                            model.onDidChangeContent(updatePreview);
-                            projectModels[currentPath] = model;
-                        } else if (item.children) {
-                            createModelsFromStructure(item.children, currentPath);
-                        }
-                    });
-                }
-                createModelsFromStructure(projectStructure);
-                
-                monacoEditor = monaco.editor.create(editorContainer, {
-                    model: projectModels[activeFilePath],
-                    theme: 'vs-light',
-                    automaticLayout: true
+        // --- Event Listeners ---
+        function attachAppEventListeners() {
+            document.getElementById('logout-btn').addEventListener('click', () => {
+                signOut(auth).then(() => {
+                    window.location.reload();
                 });
-
-                renderFileExplorer();
+            });
+            document.getElementById('save-project-btn').addEventListener('click', saveProject);
+            document.getElementById('load-project-btn').addEventListener('click', loadProjects);
+            document.getElementById('closeLoadModalBtn').addEventListener('click', () => document.getElementById('loadProjectModal').classList.add('hidden'));
+            fileExplorer.addEventListener('contextmenu', showContextMenu);
+            document.addEventListener('click', hideContextMenu);
+            openModalBtn.addEventListener('click', () => {
+                previewModal.classList.remove('hidden');
                 updatePreview();
-
-                // Attach global event listeners
-                fileExplorer.addEventListener('contextmenu', showContextMenu);
-                document.addEventListener('click', hideContextMenu);
-                openModalBtn.addEventListener('click', () => {
-                    previewModal.classList.remove('hidden');
-                    updatePreview();
-                    setPreviewMode('desktop');
-                });
-                closeModalBtn.addEventListener('click', () => {
-                    previewModal.classList.add('hidden');
-                });
-                desktopViewBtn.addEventListener('click', () => setPreviewMode('desktop'));
-                mobileViewBtn.addEventListener('click', () => setPreviewMode('mobile'));
-                openIdeaModalBtn.addEventListener('click', () => ideaModal.classList.remove('hidden'));
-                closeIdeaModalBtn.addEventListener('click', () => ideaModal.classList.add('hidden'));
-                generatePromptBtn.addEventListener('click', generateInitialPrompt);
-                copyAndPasteBtn.addEventListener('click', () => {
-                    const output = document.getElementById('generatedPromptOutput');
-                    const mainInput = document.getElementById('aiPromptInput');
-                    output.select();
-                    document.execCommand('copy');
-                    mainInput.value = output.value;
-                    ideaModal.classList.add('hidden');
-                    alert('Đã sao chép & dán kế hoạch vào ô Điều khiển!');
-                });
-                
-                // Initialize AI
-                try {
-                    const app = initializeApp(firebaseConfig);
-                    const ai = getAI(app, { backend: new GoogleAIBackend() });
-                    aiModel = getGenerativeModel(ai, { model: "gemini-2.5-flash" });
-                    runAiBtn.disabled = false;
-                    runAiBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                    runAiBtn.addEventListener('click', getAiSuggestion);
-                    statusEl.textContent = "Hệ thống đã sẵn sàng. Nhấp chuột phải vào cây thư mục để bắt đầu.";
-                } catch (e) {
-                    statusEl.textContent = `Lỗi khởi tạo AI: ${e.message}`;
-                    console.error(e);
+                setPreviewMode('desktop');
+            });
+            closeModalBtn.addEventListener('click', () => {
+                previewModal.classList.add('hidden');
+            });
+            desktopViewBtn.addEventListener('click', () => setPreviewMode('desktop'));
+            mobileViewBtn.addEventListener('click', () => setPreviewMode('mobile'));
+            openIdeaModalBtn.addEventListener('click', () => ideaModal.classList.remove('hidden'));
+            closeIdeaModalBtn.addEventListener('click', () => ideaModal.classList.add('hidden'));
+            generatePromptBtn.addEventListener('click', generateInitialPrompt);
+            copyAndPasteBtn.addEventListener('click', () => {
+                const output = document.getElementById('generatedPromptOutput');
+                const mainInput = document.getElementById('aiPromptInput');
+                output.select();
+                document.execCommand('copy');
+                mainInput.value = output.value;
+                ideaModal.classList.add('hidden');
+                alert('Đã sao chép & dán kế hoạch vào ô Điều khiển!');
+            });
+            runAiBtn.addEventListener('click', getAiSuggestion);
+            document.getElementById('new-project-btn').addEventListener('click', () => {
+                if (confirm("Bạn có chắc muốn tạo một dự án mới? Mọi thay đổi chưa lưu sẽ bị mất.")) {
+                    loadInitialProject();
                 }
             });
-        };
+        }
+        
+        // Attach auth listeners immediately on load
+        document.getElementById('login-btn').addEventListener('click', async () => {
+            const email = document.getElementById('email-input').value;
+            const password = document.getElementById('password-input').value;
+            document.getElementById('auth-error').textContent = '';
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+            } catch (error) {
+                document.getElementById('auth-error').textContent = error.message;
+            }
+        });
+        document.getElementById('register-btn').addEventListener('click', async () => {
+            const email = document.getElementById('email-input').value;
+            const password = document.getElementById('password-input').value;
+            document.getElementById('auth-error').textContent = '';
+            try {
+                await createUserWithEmailAndPassword(auth, email, password);
+            } catch (error) {
+                document.getElementById('auth-error').textContent = error.message;
+            }
+        });
+
     </script>
 </body>
 </html>
