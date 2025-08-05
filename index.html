@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototype Động - Sửa code bất kỳ với AI (v27.0 - Creative Assistant)</title>
+    <title>Prototype Động - Sửa code bất kỳ với AI (v28.1 - Context Fix)</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
@@ -102,25 +102,32 @@
 
                 <!-- Cột 2: AI và các chức năng khác -->
                 <div class="flex flex-col">
-                    <div class="bg-indigo-50 p-6 rounded-lg border border-indigo-200 h-full">
-                         <div class="flex justify-between items-center">
-                            <h2 class="text-xl font-semibold text-gray-700">2. Điều khiển AI (Sửa lỗi)</h2>
-                            <button id="openIdeaModalBtn" title="Khởi tạo Dự án từ Ý tưởng" class="bg-yellow-400 hover:bg-yellow-500 text-gray-800 font-bold p-2 rounded-full shadow-md transition duration-300 hidden">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a1 1 0 011 1v1.01a5.002 5.002 0 014.37 4.373H16a1 1 0 110 2h-1.01a5.002 5.002 0 01-4.37 4.373V17a1 1 0 11-2 0v-1.01a5.002 5.002 0 01-4.37-4.373H4a1 1 0 110-2h1.01A5.002 5.002 0 019.38 3.01V2a1 1 0 011-1zM4 10a6 6 0 1112 0 6 6 0 01-12 0z" /></svg>
-                            </button>
-                        </div>
-                        <p class="text-sm text-gray-500 mb-4">Nhập yêu cầu để sửa đổi dự án hiện tại.</p>
-                        <textarea id="aiPromptInput" class="w-full p-2 border rounded-md" rows="5"></textarea>
+                    <div class="bg-indigo-50 p-6 rounded-lg border border-indigo-200 h-full flex flex-col">
+                        <h2 class="text-xl font-semibold text-gray-700">2. Trợ lý Chỉnh sửa AI</h2>
+                        <p class="text-sm text-gray-500 mb-4">Thảo luận với AI để thực hiện các thay đổi trên dự án hiện tại.</p>
                         
-                        <div class="mt-2 flex items-center">
-                            <input id="focus-mode-checkbox" type="checkbox" class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
-                            <label for="focus-mode-checkbox" class="ml-2 block text-sm text-gray-900">Chỉ làm việc trên vùng đã chọn</label>
+                        <div id="modificationChatHistory" class="flex-grow bg-white p-3 border rounded-md overflow-y-auto mb-4 flex flex-col gap-2 min-h-[200px]">
+                             <!-- Modification chat messages will be appended here -->
+                        </div>
+                        
+                        <div class="mt-auto">
+                             <textarea id="modificationChatInput" rows="2" class="w-full p-2 border rounded-md" placeholder="Ví dụ: 'Thay đổi màu nền của body thành màu xám nhạt'"></textarea>
+                             <div class="mt-2 flex items-center">
+                                <input id="focus-mode-checkbox" type="checkbox" class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                                <label for="focus-mode-checkbox" class="ml-2 block text-sm text-gray-900">Chỉ làm việc trên vùng đã chọn (nếu có)</label>
+                            </div>
+                             <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <button id="modificationDiscussBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center">
+                                    <span id="modificationDiscussBtnText">Thảo luận</span>
+                                    <div id="modificationDiscussSpinner" class="spinner hidden ml-3"></div>
+                                </button>
+                                <button id="modificationGenerateBtn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center">
+                                    <span id="modificationGenerateBtnText">Tạo Đề xuất Sửa đổi</span>
+                                    <div id="modificationGenerateSpinner" class="spinner hidden ml-3"></div>
+                                </button>
+                            </div>
                         </div>
 
-                        <button id="runAiBtn" class="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-5 rounded-lg flex items-center justify-center">
-                            <span id="buttonText">Gửi yêu cầu AI</span>
-                            <div id="buttonSpinner" class="spinner hidden ml-3"></div>
-                        </button>
                         <h2 class="text-xl font-semibold text-gray-700 mt-8 mb-2">3. Đề xuất của AI</h2>
                         <div id="aiResponseContainer" class="h-96 overflow-y-auto">
                             <p id="aiResponsePlaceholder" class="text-gray-500">Đề xuất của AI sẽ xuất hiện ở đây...</p>
@@ -249,7 +256,8 @@
         let currentProjectId = null;
         let currentProjectName = null;
         let activeDiffEditors = [];
-        let newProjectChatHistory = []; // For the new project chat modal
+        let newProjectChatHistory = [];
+        let modificationChatHistory = []; // For the modification chat
 
         // --- DOM Elements ---
         const authScreen = document.getElementById('auth-screen');
@@ -258,7 +266,6 @@
         const editorContainer = document.getElementById('editorContainer');
         const contextMenu = document.getElementById('contextMenu');
         const statusEl = document.getElementById('status');
-        const runAiBtn = document.getElementById('runAiBtn');
         const openModalBtn = document.getElementById('openModalBtn');
         const aiResponseContainer = document.getElementById('aiResponseContainer');
         const aiResponsePlaceholder = document.getElementById('aiResponsePlaceholder');
@@ -329,6 +336,7 @@
                 'src/js/script.js': `console.log("Hello World!");`
             };
             loadProjectFromData(sampleFiles);
+            resetModificationChat();
         }
 
         function loadProjectFromData(filesData) {
@@ -518,6 +526,7 @@
                     monacoEditor.setModel(projectModels[activeFilePath]);
                     renderFileExplorer();
                     updatePreview();
+                    resetModificationChat();
                     statusEl.textContent = `Đã mở dự án "${projectName}", phiên bản ${versionData.versionNumber}.`;
                 } else {
                     statusEl.textContent = "Không tìm thấy phiên bản dự án.";
@@ -851,15 +860,21 @@
         }
 
         // --- AI Interaction Logic (Editing) ---
-        async function getAiSuggestion() {
-            undoStacks = {};
-            const userPrompt = document.getElementById('aiPromptInput').value.trim();
-            if (!userPrompt) {
-                showAlert("Thiếu thông tin", "Vui lòng nhập yêu cầu cho AI.");
+        async function handleGenerateModification() {
+            if (modificationChatHistory.length < 2) {
+                 showAlert("Thiếu thông tin", "Vui lòng thảo luận với AI trước khi tạo đề xuất.");
                 return;
             }
+            undoStacks = {};
+            
+            const generateBtn = document.getElementById('modificationGenerateBtn');
+            const spinner = document.getElementById('modificationGenerateSpinner');
+            const btnText = document.getElementById('modificationGenerateBtnText');
 
-            setLoadingState(true);
+            generateBtn.disabled = true;
+            btnText.textContent = 'Đang tạo...';
+            spinner.classList.remove('hidden');
+
             aiResponseContainer.innerHTML = '';
             aiResponsePlaceholder.textContent = "Đang chờ phản hồi...";
             aiResponseContainer.appendChild(aiResponsePlaceholder);
@@ -871,42 +886,38 @@
                 const selection = monacoEditor.getSelection();
                 const selectedText = monacoEditor.getModel().getValueInRange(selection);
 
-                if (isFocusMode) {
-                    if (!selectedText) {
-                        throw new Error("Chế độ Tập trung đang bật. Vui lòng bôi đen một đoạn code.");
-                    }
+                if (isFocusMode && !selection.isEmpty()) {
                     projectContext = `The user has selected the following code snippet from the file \`${activeFilePath}\`:\n\`\`\`\n${selectedText}\n\`\`\``;
-                    finalPrompt = `You are an expert code modification assistant. Your task is to modify the provided code snippet based on the user's request.
-CODE SNIPPET:
+                    finalPrompt = `You are an expert code modification assistant. Based on our discussion, your task is to modify the provided code snippet.
+CODE SNIPPET TO MODIFY:
 ${projectContext}
-USER'S REQUEST:
-"${userPrompt}"
+OUR DISCUSSION:
+${modificationChatHistory.map(m => `${m.role}: ${m.text}`).join('\n')}
 TASK:
-Generate a JSON object with a "changes" array containing a single modification object.
+Generate a JSON object with a "changes" array containing a single modification object for the selected code.
 - "action" must be "modify".
 - "file" must be "${activeFilePath}".
-- "reasoning" must be a DETAILED explanation in VIETNAMESE about why the change is necessary and what it improves.
-- "oldCode" MUST be an EXACT, character-for-character copy of the original code snippet. DO NOT reformat or change any whitespace or indentation.
+- "reasoning" must be a DETAILED explanation in VIETNAMESE.
+- "oldCode" MUST be an EXACT copy of the original code snippet. DO NOT reformat.
 - "newCode" MUST be the complete, modified version of the snippet.
 **CRITICAL JSON FORMATTING RULES:**
-- All values must be valid JSON strings (newlines escaped as \\n, quotes as \\").
+- All values must be valid JSON strings.
 Wrap the final JSON in \`\`\`json ... \`\`\`.`;
-
                 } else {
                     Object.entries(projectModels).forEach(([path, model]) => {
                         projectContext += `--- START OF ${path} ---\n${model.getValue()}\n--- END OF ${path} ---\n\n`;
                     });
-                    finalPrompt = `You are an expert code modification and creation assistant. Analyze the user's request based on the project files.
+                    finalPrompt = `You are an expert code modification assistant. Based on our discussion and the full project files, generate modification suggestions.
 PROJECT FILES:
 ${projectContext}
-CURRENT USER'S REQUEST:
-"${userPrompt}"
+OUR DISCUSSION:
+${modificationChatHistory.map(m => `${m.role}: ${m.text}`).join('\n')}
 TASK:
-Generate a JSON object with a "changes" array. Each object in the array represents an action:
-- For MODIFICATIONS: { "action": "modify", "file": "path/to/file.ext", "description": "...", "reasoning": "A detailed explanation in VIETNAMESE...", "oldCode": "...", "newCode": "..." }. The "oldCode" value MUST be an EXACT, character-for-character copy of the original code block. DO NOT reformat or change any whitespace or indentation.
-- For NEW FILES: { "action": "create", "file": "path/to/new_file.ext", "description": "...", "reasoning": "A detailed explanation in VIETNAMESE about the purpose of this new file...", "newCode": "..." }
+Generate a JSON object with a "changes" array. Each object represents an action:
+- For MODIFICATIONS: { "action": "modify", "file": "path/to/file.ext", "description": "...", "reasoning": "...", "oldCode": "...", "newCode": "..." }. The "oldCode" MUST be an EXACT copy. DO NOT reformat.
+- For NEW FILES: { "action": "create", "file": "path/to/new_file.ext", "description": "...", "reasoning": "...", "newCode": "..." }
 **CRITICAL JSON FORMATTING RULES:**
-- All values MUST be valid JSON strings (newlines escaped as \\n, quotes as \\").
+- All values must be valid JSON strings.
 Wrap the final JSON in \`\`\`json ... \`\`\`.`;
                 }
 
@@ -924,7 +935,9 @@ Wrap the final JSON in \`\`\`json ... \`\`\`.`;
                 statusEl.textContent = `Lỗi: ${error.message}`;
                 showAlert("Lỗi AI", error.message);
             } finally {
-                setLoadingState(false);
+                generateBtn.disabled = false;
+                btnText.textContent = 'Tạo Đề xuất Sửa đổi';
+                spinner.classList.add('hidden');
             }
         }
 
@@ -1105,14 +1118,6 @@ Wrap the final JSON in \`\`\`json ... \`\`\`.`;
             card.querySelector('.undo-buttons').classList.add('hidden');
         }
         
-        function setLoadingState(isLoading) {
-            const buttonText = document.getElementById('buttonText');
-            const buttonSpinner = document.getElementById('buttonSpinner');
-            runAiBtn.disabled = isLoading;
-            if (buttonSpinner) buttonSpinner.classList.toggle('hidden', !isLoading);
-            if (buttonText) buttonText.textContent = isLoading ? 'Đang xử lý...' : 'Gửi yêu cầu AI';
-        }
-
         // --- New Project Creation Logic ---
         function openNewProjectChatModal() {
             newProjectChatHistory = [];
@@ -1224,6 +1229,69 @@ Wrap the final JSON in \`\`\`json ... \`\`\`.`;
                 btnText.textContent = 'Tạo Dự án từ cuộc trò chuyện';
                 spinner.classList.add('hidden');
                 hideLoader();
+            }
+        }
+
+        // --- Modification Chat Logic ---
+        function resetModificationChat() {
+            modificationChatHistory = [];
+            const chatHistoryEl = document.getElementById('modificationChatHistory');
+            chatHistoryEl.innerHTML = '';
+            addMessageToModificationChat('ai', 'Chào bạn! Tôi có thể giúp gì để sửa đổi dự án này?');
+        }
+
+        function addMessageToModificationChat(role, text) {
+            modificationChatHistory.push({ role, text });
+            const chatHistoryEl = document.getElementById('modificationChatHistory');
+            const messageEl = document.createElement('div');
+            messageEl.className = `chat-bubble ${role === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}`;
+            messageEl.textContent = text;
+            chatHistoryEl.appendChild(messageEl);
+            chatHistoryEl.scrollTop = chatHistoryEl.scrollHeight;
+        }
+
+        async function handleModificationDiscussion() {
+            const inputEl = document.getElementById('modificationChatInput');
+            const userMessage = inputEl.value.trim();
+            if (!userMessage) return;
+
+            addMessageToModificationChat('user', userMessage);
+            inputEl.value = '';
+
+            const discussBtn = document.getElementById('modificationDiscussBtn');
+            const spinner = document.getElementById('modificationDiscussSpinner');
+            const btnText = document.getElementById('modificationDiscussBtnText');
+
+            discussBtn.disabled = true;
+            btnText.textContent = 'AI đang nghĩ...';
+            spinner.classList.remove('hidden');
+
+            try {
+                let projectContext = '';
+                Object.entries(projectModels).forEach(([path, model]) => {
+                    projectContext += `--- START OF ${path} ---\n${model.getValue()}\n--- END OF ${path} ---\n\n`;
+                });
+
+                const prompt = `Bạn là một trợ lý lập trình. Chúng ta đang thảo luận về việc sửa đổi một dự án web. Dưới đây là ngữ cảnh code và cuộc trò chuyện của chúng ta. Hãy tiếp tục thảo luận, đặt câu hỏi để làm rõ yêu cầu, hoặc đưa ra gợi ý. **KHÔNG** tạo ra đề xuất sửa đổi JSON trong bước này.
+                
+                NGỮ CẢNH CODE DỰ ÁN:
+                ${projectContext}
+
+                LỊCH SỬ TRÒ CHUYỆN:
+                ${modificationChatHistory.map(m => `${m.role}: ${m.text}`).join('\n')}
+                
+                Hãy trả lời một cách ngắn gọn, thân thiện để tiếp tục cuộc thảo luận.`;
+
+                const result = await aiModel.generateContent(prompt);
+                const aiResponse = result.response.text();
+                addMessageToModificationChat('ai', aiResponse);
+            } catch (error) {
+                console.error("Lỗi thảo luận sửa đổi:", error);
+                addMessageToModificationChat('ai', 'Xin lỗi, đã có lỗi xảy ra. Vui lòng thử lại.');
+            } finally {
+                discussBtn.disabled = false;
+                btnText.textContent = 'Thảo luận';
+                spinner.classList.add('hidden');
             }
         }
 
@@ -1347,7 +1415,10 @@ Wrap the final JSON in \`\`\`json ... \`\`\`.`;
             document.getElementById('newProjectDiscussBtn').addEventListener('click', handleNewProjectDiscussion);
             document.getElementById('newProjectGenerateBtn').addEventListener('click', handleGenerateProjectFromChat);
 
-            runAiBtn.addEventListener('click', getAiSuggestion);
+            // Modification Chat Buttons
+            document.getElementById('modificationDiscussBtn').addEventListener('click', handleModificationDiscussion);
+            document.getElementById('modificationGenerateBtn').addEventListener('click', handleGenerateModification);
+
         }
         
         // Attach auth listeners immediately on load
