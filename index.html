@@ -3,13 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototype Động - Sửa code bất kỳ với AI (v7 - Xử lý JSON nâng cao)</title>
+    <title>Prototype Động - Sửa code bất kỳ với AI (v19.3 - Sửa lỗi Tạo tệp)</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
     
     <style>
-        /* CSS tùy chỉnh cho phong cách Material Design */
         body { 
             font-family: 'Inter', sans-serif; 
         }
@@ -24,14 +23,71 @@
         @keyframes spin { to { transform: rotate(360deg); } }
         .hidden { display: none; }
         
-        /* Màu sắc cho code cũ và mới theo Material */
-        .code-old { color: #B91C1C; /* red-700 */ }
-        .code-new { color: #047857; /* green-700 */ }
-
-        /* Đảm bảo khung xem trước được bo góc và có viền (khác với border trong JS) */
+        .code-old { color: #B91C1C; }
+        .code-new { color: #047857; }
+        
         #previewFrame { 
             border: 1px solid #d1d5db; 
             border-radius: 0.5rem; 
+        }
+        
+        .file-explorer-item {
+            display: flex;
+            align-items: center;
+            padding: 4px 8px;
+            cursor: pointer;
+            border-radius: 4px;
+            user-select: none;
+        }
+        .file-explorer-item:hover {
+            background-color: #eef2ff;
+        }
+        .file-explorer-item.active {
+            background-color: #c7d2fe;
+        }
+        .file-explorer-item svg {
+            width: 16px;
+            height: 16px;
+            margin-right: 8px;
+            flex-shrink: 0;
+        }
+        .folder-arrow {
+            transition: transform 0.1s linear;
+        }
+        .folder-arrow.open {
+            transform: rotate(90deg);
+        }
+
+        #contextMenu {
+            position: absolute;
+            z-index: 1000;
+            background-color: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.375rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            padding: 0.5rem 0;
+            min-width: 150px;
+        }
+        .context-menu-item {
+            display: block;
+            width: 100%;
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+            text-align: left;
+        }
+        .context-menu-item:hover {
+            background-color: #f3f4f6;
+        }
+        .context-menu-separator {
+            height: 1px;
+            background-color: #e5e7eb;
+            margin: 0.5rem 0;
+        }
+        .change-group-header {
+            font-weight: 600;
+            margin-top: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #e5e7eb;
         }
     </style>
 </head>
@@ -41,126 +97,99 @@
         <header class="mb-6 pb-4 border-b border-gray-200">
             <h1 class="text-3xl font-bold text-gray-800">Prototype Động: Sửa Code Bất Kỳ Với AI</h1>
             <p class="mt-2 text-gray-600">
-                AI sẽ đề xuất một danh sách các thay đổi. Bạn có thể áp dụng từng thay đổi một cách độc lập.
+                Quản lý tệp và thư mục của bạn một cách linh hoạt.
             </p>
         </header>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <!-- Cột 1: Trình soạn thảo -->
             <div class="flex flex-col">
-                <h2 class="text-xl font-semibold text-gray-700 mb-2">1. Dán mã nguồn của bạn vào đây</h2>
-                <div id="editorContainer" class="flex-grow h-96 min-h-[600px] border border-gray-300 rounded-lg shadow-md"></div>
+                <h2 class="text-xl font-semibold text-gray-700 mb-2">1. Dự án</h2>
+                <div class="flex flex-grow border border-gray-300 rounded-lg shadow-md min-h-[600px]">
+                    <div id="fileExplorer" class="w-1/3 max-w-xs bg-gray-50 p-2 border-r border-gray-300 overflow-y-auto"></div>
+                    <div id="editorContainer" class="flex-grow"></div>
+                </div>
             </div>
 
-            <!-- Cột 2: Điều khiển AI và Trạng thái -->
-            <div class="flex flex-col">
+            <!-- Cột 2: AI và các chức năng khác -->
+             <div class="flex flex-col">
                 <div class="bg-indigo-50 p-6 rounded-lg border border-indigo-200 h-full">
-                    <h2 class="text-xl font-semibold text-gray-700 mb-2">2. Điều khiển AI</h2>
-                    <p class="text-sm text-gray-500 mb-4">Nhập yêu cầu của bạn. AI sẽ chia thành các bước nhỏ.</p>
-                    <textarea id="aiPromptInput" class="w-full p-2 border rounded-md focus:ring-indigo-500 focus:border-indigo-500" rows="5" placeholder="Ví dụ: Thay đổi tiêu đề thành 'Xin chào' và đổi màu nền nút Chạy Script thành màu đỏ."></textarea>
-                    
-                    <button id="runAiBtn" class="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-5 rounded-lg shadow-md transition duration-300 opacity-50 cursor-not-allowed flex items-center justify-center" disabled>
-                        <span id="buttonText">Gửi yêu cầu AI</span>
-                        <div id="buttonSpinner" class="spinner hidden ml-3"></div>
-                    </button>
-
-                    <h2 class="text-xl font-semibold text-gray-700 mt-8 mb-2">3. Danh sách thay đổi đề xuất</h2>
-                     <div id="aiResponseContainer" class="h-96 overflow-y-auto">
-                        <p id="aiResponsePlaceholder" class="text-gray-500">Đề xuất của AI sẽ xuất hiện ở đây...</p>
-                     </div>
-
-                    <h2 class="text-xl font-semibold text-gray-700 mt-8 mb-2">4. Trạng thái</h2>
-                    <div id="status" class="w-full bg-white p-4 rounded-md shadow-inner border text-gray-600 min-h-[50px]">
-                        Đang chờ tải trang và các thư viện...
+                    <div class="flex justify-between items-center">
+                        <h2 class="text-xl font-semibold text-gray-700">2. Điều khiển AI</h2>
+                        <button id="openIdeaModalBtn" title="Khởi tạo Dự án từ Ý tưởng" class="bg-yellow-400 hover:bg-yellow-500 text-gray-800 font-bold p-2 rounded-full shadow-md transition duration-300">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M10 2a1 1 0 011 1v1.01a5.002 5.002 0 014.37 4.373H16a1 1 0 110 2h-1.01a5.002 5.002 0 01-4.37 4.373V17a1 1 0 11-2 0v-1.01a5.002 5.002 0 01-4.37-4.373H4a1 1 0 110-2h1.01A5.002 5.002 0 019.38 3.01V2a1 1 0 011-1zM4 10a6 6 0 1112 0 6 6 0 01-12 0z" />
+                            </svg>
+                        </button>
                     </div>
+                    <p class="text-sm text-gray-500 mb-4">Nhập yêu cầu của bạn, hoặc dùng Trợ lý Khởi tạo (💡) để bắt đầu.</p>
+                    <textarea id="aiPromptInput" class="w-full p-2 border rounded-md focus:ring-indigo-500 focus:border-indigo-500" rows="5" placeholder="Ví dụ: Tạo một file alert.js trong thư mục js, sau đó gọi nó từ script.js"></textarea>
+                    
+                    <div class="flex gap-2 mt-4">
+                        <button id="runAiBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-5 rounded-lg shadow-md transition duration-300 opacity-50 cursor-not-allowed flex items-center justify-center" disabled>
+                            <span id="buttonText">Gửi yêu cầu AI</span>
+                            <div id="buttonSpinner" class="spinner hidden ml-3"></div>
+                        </button>
+                    </div>
+                    <h2 class="text-xl font-semibold text-gray-700 mt-8 mb-2">3. Đề xuất của AI</h2>
+                    <div id="aiResponseContainer" class="h-96 overflow-y-auto">
+                        <p id="aiResponsePlaceholder" class="text-gray-500">Đề xuất của AI sẽ xuất hiện ở đây...</p>
+                    </div>
+                    <h2 class="text-xl font-semibold text-gray-700 mt-8 mb-2">4. Trạng thái</h2>
+                    <div id="status" class="w-full bg-white p-4 rounded-md shadow-inner border text-gray-600 min-h-[50px]"></div>
                 </div>
             </div>
 
             <!-- Cột 3: Xem trước (Preview) -->
             <div class="flex flex-col lg:col-span-2 mt-8"> 
                 <h2 class="text-xl font-semibold text-gray-700 mb-2">5. Xem trước trực quan</h2>
-                <button id="openModalBtn" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg shadow-md">
-                    Xem trước
+                <button id="openModalBtn" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg shadow-md">Xem trước</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="contextMenu" class="hidden"></div>
+    <div id="previewModal" class="hidden fixed inset-0 z-50 overflow-y-auto overflow-x-hidden flex items-center justify-center bg-gray-900 bg-opacity-75">
+        <div class="relative w-full h-[90vh] max-w-7xl mx-auto p-4 flex flex-col">
+            <div class="relative bg-white rounded-lg shadow-xl flex flex-col flex-grow">
+                <button type="button" id="closeModalBtn" class="absolute top-3 right-2.5 text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm p-1.5 ml-auto inline-flex items-center">
+                    <svg aria-hidden="true" class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
                 </button>
-                <div id="previewModal" class="hidden fixed inset-0 z-50 overflow-y-auto overflow-x-hidden flex items-center justify-center bg-gray-900 bg-opacity-75">
-                    <div class="relative w-full h-[90vh] max-w-7xl mx-auto p-4 flex flex-col">
-                        <div class="relative bg-white rounded-lg shadow-xl flex flex-col flex-grow">
-                            <button type="button" class="absolute top-3 right-2.5 text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm p-1.5 ml-auto inline-flex items-center" data-modal-toggle="previewModal">
-                                <svg aria-hidden="true" class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
-                                <span class="sr-only">Close modal</span>
-                            </button>
-                            <div class="p-6 flex flex-col flex-grow">
-                                <div id="previewControls" class="flex justify-center mb-4 space-x-4">
-                                    <button id="desktopViewBtn" class="px-5 py-2 rounded-lg shadow-md transition duration-300 font-medium text-sm">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline-block mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9.75 14.25L13.5 14.25L13.5 17M14.25 10.5V7.5C14.25 6.402 13.348 5.5 12.25 5.5H5.75C4.652 5.5 3.75 6.402 3.75 7.5V16.5C3.75 17.598 4.652 18.5 5.75 18.5H12.25C13.348 18.5 14.25 17.598 14.25 16.5V13.5M20.25 10.5V7.5C20.25 6.402 19.348 5.5 18.25 5.5H11.75C10.652 5.5 9.75 6.402 9.75 7.5V16.5C9.75 17.598 10.652 18.5 11.75 18.5H18.25C19.348 18.5 20.25 17.598 20.25 16.5V13.5"/>
-                                        </svg>
-                                        <span>Desktop</span>
-                                    </button>
-                                    <button id="mobileViewBtn" class="px-5 py-2 rounded-lg shadow-md transition duration-300 font-medium text-sm">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline-block mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4a2 2 0 012-2h6a2 2 0 012 2v12m-6 4a2 2 0 11-4 0 2 2 0 014 0zM12 22a2 2 0 100-4 2 2 0 000 4z"/>
-                                        </svg>
-                                        <span>Mobile</span>
-                                    </button>
-                                </div>
-                                <div id="previewFrameContainer" class="flex-grow flex justify-center items-center overflow-auto bg-gray-50 rounded-lg p-4">
-                                    <iframe id="previewFrame" title="Visual Preview" class="border border-gray-300 rounded-lg shadow-md transition-all duration-300 ease-in-out"></iframe>
-                                </div>
-                            </div>
-                        </div>
+                <div class="p-6 flex flex-col flex-grow">
+                    <div id="previewControls" class="flex justify-center mb-4 space-x-4">
+                        <button id="desktopViewBtn" class="px-5 py-2 rounded-lg shadow-md transition duration-300 font-medium text-sm">Desktop</button>
+                        <button id="mobileViewBtn" class="px-5 py-2 rounded-lg shadow-md transition duration-300 font-medium text-sm">Mobile</button>
+                    </div>
+                    <div id="previewFrameContainer" class="flex-grow flex justify-center items-center overflow-auto bg-gray-50 rounded-lg p-4">
+                        <iframe id="previewFrame" title="Visual Preview" class="border border-gray-300 rounded-lg shadow-md transition-all duration-300 ease-in-out"></iframe>
                     </div>
                 </div>
-                <script>
-                    const openModalBtn = document.getElementById('openModalBtn');
-                    const previewModal = document.getElementById('previewModal');
-                    const desktopViewBtn = document.getElementById('desktopViewBtn');
-                    const mobileViewBtn = document.getElementById('mobileViewBtn');
-                    const previewFrameContainer = document.getElementById('previewFrameContainer');
-                    const previewFrame = document.getElementById('previewFrame'); // Đảm bảo lấy lại tham chiếu
+            </div>
+        </div>
+    </div>
 
-                    openModalBtn.addEventListener('click', () => {
-                        previewModal.classList.remove('hidden');
-                        updatePreview();
-                        setPreviewMode('desktop'); // Mặc định hiển thị chế độ desktop khi mở modal
-                    });
-                    document.getElementById('previewModal').querySelector('button[data-modal-toggle="previewModal"]').addEventListener('click', () => {
-                        previewModal.classList.add('hidden');
-                    });
-
-                    // Hàm chuyển đổi chế độ xem (Desktop/Mobile)
-                    function setPreviewMode(mode) {
-                        // Reset trạng thái của tất cả các nút
-                        desktopViewBtn.classList.remove('bg-indigo-600', 'text-white', 'shadow-lg');
-                        desktopViewBtn.classList.add('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
-                        mobileViewBtn.classList.remove('bg-indigo-600', 'text-white', 'shadow-lg');
-                        mobileViewBtn.classList.add('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
-
-                        // Áp dụng trạng thái cho nút và kích thước iframe
-                        if (mode === 'desktop') {
-                            desktopViewBtn.classList.add('bg-indigo-600', 'text-white', 'shadow-lg');
-                            desktopViewBtn.classList.remove('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
-
-                            previewFrame.style.width = '100%';
-                            previewFrame.style.height = '100%'; // Cho phép iframe co giãn theo container
-                            previewFrameContainer.classList.remove('items-center'); // Bỏ căn giữa dọc
-                            
-                        } else if (mode === 'mobile') {
-                            mobileViewBtn.classList.add('bg-indigo-600', 'text-white', 'shadow-lg');
-                            mobileViewBtn.classList.remove('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
-
-                            // Kích thước chuẩn của một thiết bị di động (ví dụ: iPhone 6/7/8)
-                            previewFrame.style.width = '375px'; 
-                            previewFrame.style.height = '667px'; 
-                            previewFrameContainer.classList.add('items-center'); // Căn giữa dọc
-                        }
-                        updatePreview(); // Cập nhật nội dung xem trước
-                    }
-
-                    // Gán sự kiện click cho các nút
-                    desktopViewBtn.addEventListener('click', () => setPreviewMode('desktop'));
-                    mobileViewBtn.addEventListener('click', () => setPreviewMode('mobile'));
-                </script>
+    <div id="ideaModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-75">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl flex flex-col">
+            <div class="flex justify-between items-center p-4 border-b">
+                <h3 class="text-xl font-semibold text-gray-800">Trợ lý Khởi tạo Dự án</h3>
+                <button id="closeIdeaModalBtn" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
+                </button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div>
+                    <label for="ideaInput" class="block mb-2 text-sm font-medium text-gray-700">Nhập ý tưởng của bạn vào đây:</label>
+                    <textarea id="ideaInput" rows="3" class="w-full p-2 border rounded-md" placeholder="Ví dụ: ứng dụng web về mô phỏng thí nghiệm hóa học"></textarea>
+                </div>
+                <button id="generatePromptBtn" class="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center">
+                    <span id="generateBtnText">Tạo Kế hoạch Chi tiết</span>
+                    <div id="generateSpinner" class="spinner hidden ml-3"></div>
+                </button>
+                <div>
+                    <label for="generatedPromptOutput" class="block mb-2 text-sm font-medium text-gray-700">Kế hoạch đề xuất (Lời nhắc khởi tạo):</label>
+                    <textarea id="generatedPromptOutput" rows="10" class="w-full p-2 border rounded-md bg-gray-50" readonly placeholder="AI sẽ tạo một lời nhắc chi tiết tại đây..."></textarea>
+                </div>
+                <button id="copyAndPasteBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Sao chép & Dán vào ô Điều khiển</button>
             </div>
         </div>
     </div>
@@ -178,250 +207,635 @@
             appId: "1:277847908656:web:77eb210b8e2b2b7dbca8f5"
         };
 
+        // --- Data & State ---
         let monacoEditor;
         let aiModel;
+        let activeFilePath = 'index.html';
+        let conversationHistory = [];
+        let undoStacks = {};
 
+        let projectStructure = {
+            'index.html': { type: 'file' },
+            'src': {
+                type: 'folder', isOpen: true, children: {
+                    'css': { type: 'folder', isOpen: true, children: { 'style.css': { type: 'file' } } },
+                    'js': { type: 'folder', isOpen: true, children: { 'script.js': { type: 'file' } } }
+                }
+            }
+        };
+        let projectModels = {};
+
+        // DOM Elements
+        const fileExplorer = document.getElementById('fileExplorer');
+        const editorContainer = document.getElementById('editorContainer');
+        const contextMenu = document.getElementById('contextMenu');
         const statusEl = document.getElementById('status');
         const runAiBtn = document.getElementById('runAiBtn');
-        const previewFrame = document.getElementById('previewFrame');
-        const aiPromptInput = document.getElementById('aiPromptInput');
+        const openModalBtn = document.getElementById('openModalBtn');
         const aiResponseContainer = document.getElementById('aiResponseContainer');
         const aiResponsePlaceholder = document.getElementById('aiResponsePlaceholder');
-        const buttonText = document.getElementById('buttonText');
-        const buttonSpinner = document.getElementById('buttonSpinner');
-        
-        const placeholderCode = `<!-- Dán mã nguồn HTML của bạn vào đây -->
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Trang Mẫu</title>
-</head>
-<body>
-    <h1 id="title">Tiêu đề Gốc</h1>
-    <button onclick="changeContent()">Chạy Script</button>
-    <script>
-        function changeContent() {
-            // AI sẽ sửa hàm này
-            document.getElementById('title').textContent = 'Nội dung Gốc';
-        }
-    <\/script>
-</body>
-</html>`;
+        const previewModal = document.getElementById('previewModal');
+        const closeModalBtn = document.getElementById('closeModalBtn');
+        const desktopViewBtn = document.getElementById('desktopViewBtn');
+        const mobileViewBtn = document.getElementById('mobileViewBtn');
+        const openIdeaModalBtn = document.getElementById('openIdeaModalBtn');
+        const ideaModal = document.getElementById('ideaModal');
+        const closeIdeaModalBtn = document.getElementById('closeIdeaModalBtn');
+        const generatePromptBtn = document.getElementById('generatePromptBtn');
+        const copyAndPasteBtn = document.getElementById('copyAndPasteBtn');
 
-        window.onload = function() {
-            statusEl.textContent = "Đang khởi tạo trình soạn thảo...";
-            
-            require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' }});
-            require(['vs/editor/editor.main'], function() {
-                monacoEditor = monaco.editor.create(document.getElementById('editorContainer'), {
-                    value: placeholderCode,
-                    language: 'html',
-                    theme: 'vs-light',
-                    automaticLayout: true,
-                    fontSize: 14,
-                    wordWrap: 'on'
-                });
-
-                monacoEditor.onDidChangeModelContent(() => updatePreview());
-                updatePreview();
-                statusEl.textContent = "Trình soạn thảo sẵn sàng. Đang khởi tạo AI Model...";
-                initializeFirebaseAI();
-            });
-        };
-
-        function initializeFirebaseAI() {
-            try {
-                const app = initializeApp(firebaseConfig);
-                const ai = getAI(app, { backend: new GoogleAIBackend() });
-                aiModel = getGenerativeModel(ai, { model: "gemini-1.5-flash-latest" });
-                
-                statusEl.textContent = "Hệ thống đã sẵn sàng. Hãy dán code và ra lệnh cho AI.";
-                runAiBtn.disabled = false;
-                runAiBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                runAiBtn.addEventListener('click', getAiSuggestion);
-
-            } catch (e) {
-                console.error("Lỗi khi khởi tạo AI Model:", e);
-                statusEl.innerHTML = `Lỗi khởi tạo AI Model: ${e.message}.<br>Hãy chắc rằng bạn đã thay thế firebaseConfig và kích hoạt AI cho dự án.`;
-                statusEl.classList.add('text-red-500');
+        // --- Core Logic ---
+        function getLanguageForFile(filename) {
+            const extension = filename.split('.').pop();
+            switch (extension) {
+                case 'js': return 'javascript';
+                case 'css': return 'css';
+                case 'html': return 'html';
+                default: return 'plaintext';
             }
         }
 
+        function findItemAndParentByPath(path) {
+            if (!path) return { item: null, parent: null, key: null };
+            const parts = path.split('/');
+            let currentLevel = projectStructure;
+            let parent = { children: projectStructure };
+            let currentItem = null;
+
+            for (let i = 0; i < parts.length; i++) {
+                const key = parts[i];
+                if (!currentLevel || !currentLevel[key]) return { item: null, parent: null, key: null };
+                
+                if (i === parts.length - 1) {
+                    currentItem = currentLevel[key];
+                    parent = (i === 0) ? null : findItemByPath(parts.slice(0, i).join('/'))?.item;
+                    return { item: currentItem, parent: parent?.children || projectStructure, key: key };
+                }
+                currentLevel = currentLevel[key].children;
+            }
+            return { item: null, parent: null, key: null };
+        }
+
+        function findItemByPath(path) {
+            if (!path) return { item: projectStructure };
+            const parts = path.split('/');
+            let currentItem = projectStructure;
+            for (const part of parts) {
+                if (!currentItem) return { item: null };
+                currentItem = currentItem.children ? currentItem.children[part] : currentItem[part];
+            }
+            return { item: currentItem };
+        }
+        
+        // --- File Explorer & Context Menu ---
+        function renderFileExplorer() {
+            fileExplorer.innerHTML = '';
+            const rootUl = document.createElement('ul');
+            
+            function createTree(structure, parentElement, pathPrefix = '') {
+                Object.entries(structure).forEach(([name, item]) => {
+                    const currentPath = pathPrefix ? `${pathPrefix}/${name}` : name;
+                    const li = document.createElement('li');
+                    li.dataset.path = currentPath;
+                    
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'file-explorer-item';
+                    itemDiv.dataset.path = currentPath;
+                    if (currentPath === activeFilePath) itemDiv.classList.add('active');
+                    
+                    if (item.type === 'folder') {
+                        itemDiv.innerHTML = `<svg class="folder-arrow ${item.isOpen ? 'open' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg><svg fill="currentColor" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"></path></svg><span>${name}</span>`;
+                        itemDiv.addEventListener('click', (e) => { e.stopPropagation(); toggleFolder(item); });
+                        li.appendChild(itemDiv);
+                        if (item.isOpen && item.children) {
+                            const childrenUl = document.createElement('ul');
+                            childrenUl.style.paddingLeft = '16px';
+                            createTree(item.children, childrenUl, currentPath);
+                            li.appendChild(childrenUl);
+                        }
+                    } else {
+                        itemDiv.innerHTML = `<svg style="margin-left: 16px;" fill="currentColor" viewBox="0 0 20 20"><path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h2a2 2 0 002-2V4a2 2 0 00-2-2H9z"></path><path d="M4 12a2 2 0 012-2h1v4a2 2 0 002 2h1v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-4z"></path></svg><span>${name}</span>`;
+                        itemDiv.addEventListener('click', (e) => { e.stopPropagation(); switchFile(currentPath); });
+                        li.appendChild(itemDiv);
+                    }
+                    parentElement.appendChild(li);
+                });
+            }
+            createTree(projectStructure, rootUl);
+            fileExplorer.appendChild(rootUl);
+        }
+
+        function showContextMenu(e) {
+            e.preventDefault();
+            const target = e.target.closest('[data-path], #fileExplorer');
+            const path = target.dataset.path || '';
+
+            let menuItems = '';
+            const { item } = findItemAndParentByPath(path);
+            const targetType = item ? item.type : 'root';
+
+            if (targetType === 'file') {
+                menuItems = `<button class="context-menu-item" onclick="window.handleRename('${path}')">Rename</button>
+                             <button class="context-menu-item" onclick="window.handleDelete('${path}')">Delete</button>`;
+            } else { // Folder or root
+                menuItems = `<button class="context-menu-item" onclick="window.handleNewFile('${path}')">New File</button>
+                             <button class="context-menu-item" onclick="window.handleNewFolder('${path}')">New Folder</button>`;
+                if (targetType === 'folder') {
+                    menuItems += `<div class="context-menu-separator"></div>
+                                  <button class="context-menu-item" onclick="window.handleRename('${path}')">Rename</button>
+                                  <button class="context-menu-item" onclick="window.handleDelete('${path}')">Delete</button>`;
+                }
+            }
+            
+            contextMenu.innerHTML = menuItems;
+            contextMenu.style.left = `${e.pageX}px`;
+            contextMenu.style.top = `${e.pageY}px`;
+            contextMenu.classList.remove('hidden');
+        }
+
+        function hideContextMenu() {
+            contextMenu.classList.add('hidden');
+        }
+
+        // --- File Operations ---
+        window.handleNewFile = (parentPath) => {
+            hideContextMenu();
+            const filename = prompt("Enter new file name:");
+            if (!filename) return;
+
+            const newPath = parentPath ? `${parentPath}/${filename}` : filename;
+            const { item: parentItem } = findItemByPath(parentPath);
+            const targetChildren = parentPath ? parentItem.children : projectStructure;
+
+            if (targetChildren[filename]) {
+                alert("A file or folder with this name already exists.");
+                return;
+            }
+            
+            targetChildren[filename] = { type: 'file' };
+            projectModels[newPath] = monaco.editor.createModel("", getLanguageForFile(filename));
+            projectModels[newPath].onDidChangeContent(updatePreview);
+            renderFileExplorer();
+            switchFile(newPath);
+        };
+
+        window.handleNewFolder = (parentPath) => {
+            hideContextMenu();
+            const foldername = prompt("Enter new folder name:");
+            if (!foldername) return;
+
+            const { item: parentItem } = findItemByPath(parentPath);
+            const targetChildren = parentPath ? parentItem.children : projectStructure;
+
+            if (targetChildren[foldername]) {
+                alert("A file or folder with this name already exists.");
+                return;
+            }
+
+            targetChildren[foldername] = { type: 'folder', isOpen: true, children: {} };
+            renderFileExplorer();
+        };
+
+        window.handleRename = (path) => {
+            hideContextMenu();
+            const { item, parent, key } = findItemAndParentByPath(path);
+            if (!item) return;
+
+            const newName = prompt("Enter new name:", key);
+            if (!newName || newName === key) return;
+            
+            if (parent[newName]) {
+                alert("A file or folder with this name already exists.");
+                return;
+            }
+
+            parent[newName] = item;
+            delete parent[key];
+
+            if (item.type === 'file') {
+                const newPath = path.substring(0, path.lastIndexOf('/') + 1) + newName;
+                projectModels[newPath] = projectModels[path];
+                delete projectModels[path];
+                if(activeFilePath === path) activeFilePath = newPath;
+            } else { 
+                function updateChildPaths(oldPathPrefix, newPathPrefix) {
+                    Object.keys(projectModels).forEach(p => {
+                        if (p.startsWith(oldPathPrefix + '/')) {
+                            const newP = newPathPrefix + p.substring(oldPathPrefix.length);
+                            projectModels[newP] = projectModels[p];
+                            delete projectModels[p];
+                            if(activeFilePath === p) activeFilePath = newP;
+                        }
+                    });
+                }
+                const newPath = path.substring(0, path.lastIndexOf('/') + 1) + newName;
+                updateChildPaths(path, newPath);
+            }
+            
+            renderFileExplorer();
+        };
+
+        window.handleDelete = (path, skipConfirm = false) => {
+            hideContextMenu();
+            const { item, parent, key } = findItemAndParentByPath(path);
+            if (!item || (!skipConfirm && !confirm(`Are you sure you want to delete "${key}"?`))) return;
+
+            delete parent[key];
+
+            function deleteRecursive(p) {
+                if (projectModels[p]) {
+                    projectModels[p].dispose();
+                    delete projectModels[p];
+                }
+                Object.keys(projectModels).forEach(childPath => {
+                    if (childPath.startsWith(p + '/')) {
+                        projectModels[childPath].dispose();
+                        delete projectModels[childPath];
+                    }
+                });
+            }
+            deleteRecursive(path);
+
+            if (activeFilePath.startsWith(path)) {
+                switchFile('index.html');
+            }
+
+            renderFileExplorer();
+        };
+
+        function toggleFolder(folderItem) {
+            folderItem.isOpen = !folderItem.isOpen;
+            renderFileExplorer();
+        }
+
+        function switchFile(filePath) {
+            if (!projectModels[filePath]) {
+                console.error(`Model not found for path: ${filePath}`);
+                return;
+            }
+            activeFilePath = filePath;
+            monacoEditor.setModel(projectModels[filePath]);
+            renderFileExplorer();
+        }
+
+        // --- Preview Logic ---
+        function updatePreview() {
+            try {
+                const frame = document.getElementById('previewFrame');
+                if (!frame) return;
+
+                let htmlContent = projectModels['index.html']?.getValue() || '';
+                
+                const linkRegex = /<link\s+.*?href="([^"]+)"[^>]*>/g;
+                const scriptRegex = /<script\s+.*?src="([^"]+)"[^>]*><\/script>/g;
+
+                htmlContent = htmlContent.replace(linkRegex, (match, href) => {
+                    const cssContent = projectModels[href]?.getValue();
+                    return cssContent ? `<style>\n${cssContent}\n</style>` : match;
+                });
+
+                htmlContent = htmlContent.replace(scriptRegex, (match, src) => {
+                    const jsContent = projectModels[src]?.getValue();
+                    return jsContent ? `<script>${jsContent.replace(/<\/script>/g, '<\\/script>')}<\/script>` : match;
+                });
+
+                frame.srcdoc = htmlContent;
+            } catch (e) { 
+                console.error("Lỗi khi cập nhật xem trước:", e);
+            }
+        }
+        
+        function setPreviewMode(mode) {
+            const frame = document.getElementById('previewFrame');
+            if (mode === 'desktop') {
+                frame.style.width = '100%';
+                frame.style.height = '100%';
+            } else {
+                frame.style.width = '375px';
+                frame.style.height = '667px';
+            }
+        }
+
+        // --- AI Interaction Logic ---
         async function getAiSuggestion() {
-            const userPrompt = aiPromptInput.value.trim();
+            undoStacks = {};
+            const userPrompt = document.getElementById('aiPromptInput').value.trim();
             if (!userPrompt) {
                 statusEl.textContent = "Vui lòng nhập yêu cầu cho AI.";
-                statusEl.classList.add('text-red-500');
                 return;
             }
 
             setLoadingState(true);
-            statusEl.textContent = "1. Đang gửi yêu cầu đến Gemini để phân tích...";
             aiResponseContainer.innerHTML = '';
             aiResponsePlaceholder.textContent = "Đang chờ phản hồi...";
             aiResponseContainer.appendChild(aiResponsePlaceholder);
 
             try {
-                const fullHtmlCode = monacoEditor.getValue();
-                
-                // --- LỜI NHẮC AI ĐƯỢC CẬP NHẬT THEO PHÂN TÍCH ---
-                const finalPrompt = `
-You are an expert code modification assistant. Your task is to break down a user's request into a series of small, specific code replacements.
-You must analyze the user's request and the provided source code, then generate a list of changes.
+                let projectContext = '';
+                Object.entries(projectModels).forEach(([path, model]) => {
+                    projectContext += `--- START OF ${path} ---\n${model.getValue()}\n--- END OF ${path} ---\n\n`;
+                });
 
-SOURCE CODE:
-\`\`\`html
-${fullHtmlCode}
-\`\`\`
-
-USER'S REQUEST:
+                const finalPrompt = `You are an expert code modification and creation assistant. Analyze the user's request based on the project files.
+PROJECT FILES:
+${projectContext}
+CURRENT USER'S REQUEST:
 "${userPrompt}"
-
 TASK:
-Generate a single JSON object containing a list of changes.
-**You MUST wrap the final JSON object in a markdown code block like this: \`\`\`json ... \`\`\`**
-
-The JSON object must have a single key "changes", which is an array.
-Each object in the "changes" array must have three keys:
-1.  "description": A brief, user-friendly description of the change in Vietnamese.
-2.  "oldCode": The exact, contiguous block of code to be replaced. This must be found in the source code.
-3.  "newCode": The new block of code that will replace the old one.
-
-**IMPORTANT RULES:**
-- Only return the JSON object, wrapped in the \`\`\`json ... \`\`\` block. No other text or markdown.
-- The "oldCode" must be an exact substring from the provided source code.
-- If the user's request is unclear or cannot be translated into specific code changes, return an empty "changes" array.
-`;
+Generate a JSON object with a "changes" array. Each object in the array represents an action:
+- For MODIFICATIONS: { "action": "modify", "file": "path/to/file.ext", "description": "...", "oldCode": "...", "newCode": "..." }
+- For NEW FILES: { "action": "create", "file": "path/to/new_file.ext", "description": "...", "newCode": "..." }
+**CRITICAL JSON FORMATTING RULES:**
+- The final output MUST be a single JSON object inside a markdown block.
+- All values in the JSON object MUST be valid JSON strings.
+- This means all newline characters within "oldCode" and "newCode" MUST be escaped as \\n.
+- All double quotes within "oldCode" and "newCode" MUST be escaped as \\".
+Wrap the final JSON in \`\`\`json ... \`\`\`.`;
 
                 const result = await aiModel.generateContent(finalPrompt);
-                const responseText = result.response.text();
-                
-                // --- BƯỚC 2: TRÍCH XUẤT KHỐI JSON ---
-                const jsonString = extractJsonBlock(responseText);
-                if (!jsonString) {
-                    throw new Error("Không tìm thấy khối JSON hợp lệ trong phản hồi của AI.");
-                }
-                
-                // --- BƯỚC 4: PHÂN TÍCH JSON ---
+                const jsonString = result.response.text().match(/```json\s*([\s\S]*?)\s*```/)?.[1].trim();
+                if (!jsonString) throw new Error("Phản hồi của AI không hợp lệ.");
+
                 const aiResponse = JSON.parse(jsonString);
+                if (!aiResponse.changes || !Array.isArray(aiResponse.changes)) throw new Error("Phản hồi JSON không đúng định dạng.");
                 
-                if (!aiResponse.changes || !Array.isArray(aiResponse.changes)) {
-                    throw new Error("Phản hồi của AI không đúng định dạng JSON yêu cầu (thiếu key 'changes' hoặc không phải là mảng).");
-                }
-                
-                // --- BƯỚC 5 & 6: RENDER VÀ CHÈN VÀO DOM ---
                 renderChangeList(aiResponse.changes);
 
             } catch (error) {
-                console.error("Lỗi trong quá trình lấy đề xuất AI:", error);
-                statusEl.textContent = `Đã xảy ra lỗi: ${error.message}`;
-                statusEl.classList.add('text-red-500');
-                aiResponsePlaceholder.textContent = `Lỗi: ${error.message}`;
+                console.error("Lỗi AI:", error);
+                statusEl.textContent = `Lỗi: ${error.message}`;
             } finally {
                 setLoadingState(false);
             }
         }
 
-        // HÀM MỚI: Trích xuất khối JSON từ phản hồi của AI
-        function extractJsonBlock(text) {
-            const match = text.match(/```json\s*([\s\S]*?)\s*```/);
-            if (match && match[1]) {
-                return match[1].trim();
-            }
-            // Fallback: Nếu không có khối markdown, thử tìm đối tượng JSON thô
-            const rawJsonMatch = text.match(/{\s*"changes":\s*\[[\s\S]*\]\s*}/);
-            if(rawJsonMatch && rawJsonMatch[0]) {
-                return rawJsonMatch[0].trim();
-            }
-            console.error("Không thể trích xuất JSON. Phản hồi thô:", text);
-            return null;
-        }
-        
         function renderChangeList(changes) {
-            aiResponseContainer.innerHTML = ''; // Xóa placeholder
-            
+            aiResponseContainer.innerHTML = '';
             if (changes.length === 0) {
-                aiResponsePlaceholder.textContent = "AI không tìm thấy thay đổi nào có thể thực hiện từ yêu cầu của bạn.";
+                aiResponsePlaceholder.textContent = "AI không tìm thấy thay đổi nào.";
                 aiResponseContainer.appendChild(aiResponsePlaceholder);
-                statusEl.textContent = "Sẵn sàng cho yêu cầu mới.";
                 return;
             }
 
-            statusEl.innerHTML = `<b>AI đã đề xuất ${changes.length} thay đổi. Vui lòng xem lại và áp dụng.</b>`;
-            statusEl.classList.remove('text-red-500');
-            statusEl.classList.add('text-blue-600');
-
-            changes.forEach((change, index) => {
+            changes.forEach((change, i) => {
+                change.uniqueId = `change-${i}`;
                 const card = document.createElement('div');
-                card.className = 'bg-white p-4 mb-4 rounded-lg shadow-md'; 
-
-                card.innerHTML = `
-                    <p class="font-semibold text-gray-800">${index + 1}. ${change.description}</p>
-                    <div class="mt-2">
-                        <p class="text-sm font-medium text-gray-500">Code cũ:</p>
-                        <pre class="code-old"><code></code></pre>
-                    </div>
-                    <div class="mt-2">
-                        <p class="text-sm font-medium text-gray-500">Code mới:</p>
-                        <pre class="code-new"><code></code></pre>
-                    </div>
-                    <button class="apply-change-btn mt-4 w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300">
-                        [✓] Áp dụng thay đổi này
-                    </button>
-                `;
+                card.className = 'bg-white p-4 mb-4 rounded-lg shadow-md';
+                card.id = change.uniqueId;
                 
-                card.querySelector('.code-old code').textContent = change.oldCode;
-                card.querySelector('.code-new code').textContent = change.newCode;
+                if (change.action === 'create') {
+                    card.innerHTML = `<p class="font-semibold text-gray-800">${change.description}</p>
+                                      <p class="text-sm text-gray-500 mt-2">Tạo tệp mới: <code class="font-mono bg-gray-200 p-1 rounded">${change.file}</code></p>
+                                      <pre class="code-new mt-2"><code></code></pre>`;
+                    card.querySelector('.code-new code').textContent = change.newCode;
+                } else { // modify
+                    card.innerHTML = `<p class="font-semibold text-gray-800">${change.description}</p>
+                                      <p class="text-sm text-gray-500 mt-2">Trong tệp: <code class="font-mono bg-gray-200 p-1 rounded">${change.file}</code></p>
+                                      <div class="mt-2"><p class="text-sm font-medium text-gray-500">Code cũ:</p><pre class="code-old"><code></code></pre></div>
+                                      <div class="mt-2"><p class="text-sm font-medium text-gray-500">Code mới:</p><pre class="code-new"><code></code></pre></div>`;
+                    card.querySelector('.code-old code').textContent = change.oldCode;
+                    card.querySelector('.code-new code').textContent = change.newCode;
+                }
+                
+                const applyButtonContainer = document.createElement('div');
+                applyButtonContainer.className = 'apply-buttons mt-4';
+                applyButtonContainer.innerHTML = `<button class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg">Áp dụng</button>`;
+                applyButtonContainer.querySelector('button').addEventListener('click', () => applySingleChange(change));
+                
+                const undoButtonContainer = document.createElement('div');
+                undoButtonContainer.className = 'undo-buttons mt-4 hidden';
+                undoButtonContainer.innerHTML = `<button class="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg">[↶] Hoàn tác</button>`;
+                undoButtonContainer.querySelector('button').addEventListener('click', () => undoChange(change.uniqueId));
 
-                const applyBtn = card.querySelector('.apply-change-btn');
-                applyBtn.addEventListener('click', () => {
-                    applySingleChange(change.oldCode, change.newCode, applyBtn);
-                });
-
+                card.appendChild(applyButtonContainer);
+                card.appendChild(undoButtonContainer);
                 aiResponseContainer.appendChild(card);
             });
         }
 
-        function applySingleChange(oldCode, newCode, button) {
-            const editorModel = monacoEditor.getModel();
-            const matches = editorModel.findMatches(oldCode, false, false, true, null, true);
+        function applySingleChange(change) {
+            const card = document.getElementById(change.uniqueId);
+            if (change.action === 'create') {
+                const parts = change.file.split('/');
+                const filename = parts.pop();
+                const parentPath = parts.join('/');
+                const { item: parentFolder } = findItemByPath(parentPath);
+                if (parentFolder && (parentPath === '' || parentFolder.type === 'folder')) {
+                    const targetChildren = parentPath ? parentFolder.children : projectStructure;
+                    targetChildren[filename] = { type: 'file' };
+                    projectModels[change.file] = monaco.editor.createModel(change.newCode, getLanguageForFile(change.file));
+                    projectModels[change.file].onDidChangeContent(updatePreview);
+                    
+                    undoStacks[change.uniqueId] = { action: 'create', path: change.file };
 
-            if (matches.length > 0) {
-                const range = matches[0].range;
-                const op = { range: range, text: newCode };
-                monacoEditor.executeEdits("ai-replace-single", [op]);
+                    renderFileExplorer();
+                    switchFile(change.file);
+                    statusEl.textContent = `Đã tạo tệp ${change.file}`;
+                } else {
+                    alert(`Không thể tạo tệp, thư mục cha "${parentPath}" không tồn tại.`);
+                    return;
+                }
+            } else { // modify
+                const targetModel = projectModels[change.file];
+                if (!targetModel) {
+                    alert(`Không tìm thấy tệp ${change.file}`);
+                    return;
+                }
+                const match = targetModel.findMatches(change.oldCode, false, false, true, null, true)[0];
+                if (match) {
+                    let inverseEdits = [];
+                    targetModel.pushEditOperations([], [{ range: match.range, text: change.newCode }], (inverse) => { inverseEdits = inverse; return null; });
+                    
+                    undoStacks[change.uniqueId] = { action: 'modify', path: change.file, edits: inverseEdits };
 
-                button.textContent = 'Đã áp dụng';
-                button.disabled = true;
-                button.classList.remove('bg-green-600', 'hover:bg-green-700');
-                button.classList.add('bg-gray-400', 'cursor-not-allowed');
-                statusEl.textContent = "Áp dụng thay đổi thành công!";
-                statusEl.classList.add('text-green-600');
-            } else {
-                alert(`Không tìm thấy đoạn mã cũ trong trình soạn thảo:\n\n${oldCode}`);
-                statusEl.textContent = "Lỗi: Không tìm thấy mã cũ để thay thế.";
-                statusEl.classList.add('text-red-500');
+                    statusEl.textContent = `Đã cập nhật tệp ${change.file}`;
+                } else {
+                    alert(`Không tìm thấy mã cũ trong tệp ${change.file}`);
+                    return;
+                }
             }
+            card.querySelector('.apply-buttons').classList.add('hidden');
+            card.querySelector('.undo-buttons').classList.remove('hidden');
         }
-
-        function updatePreview() {
-            try {
-                const code = monacoEditor.getValue();
-                previewFrame.srcdoc = code;
-            } catch (e) { /* Bỏ qua lỗi nhỏ */ }
+        
+        function undoChange(uniqueId) {
+            const undoInfo = undoStacks[uniqueId];
+            if (!undoInfo) return;
+            
+            if (undoInfo.action === 'create') {
+                window.handleDelete(undoInfo.path, true); // Pass true to skip confirm
+                statusEl.textContent = `Đã hoàn tác (xóa) tệp ${undoInfo.path}`;
+            } else { // modify
+                const targetModel = projectModels[undoInfo.path];
+                if (targetModel && undoInfo.edits) {
+                    targetModel.pushEditOperations([], undoInfo.edits, () => null);
+                    statusEl.textContent = `Đã hoàn tác thay đổi trong ${undoInfo.path}`;
+                }
+            }
+            
+            delete undoStacks[uniqueId];
+            const card = document.getElementById(uniqueId);
+            card.querySelector('.apply-buttons').classList.remove('hidden');
+            card.querySelector('.undo-buttons').classList.add('hidden');
         }
-
+        
         function setLoadingState(isLoading) {
+            const buttonText = document.getElementById('buttonText');
+            const buttonSpinner = document.getElementById('buttonSpinner');
             runAiBtn.disabled = isLoading;
-            if (isLoading) {
-                buttonText.textContent = 'Đang xử lý...';
-                buttonSpinner.classList.remove('hidden');
-            } else {
-                buttonText.textContent = 'Gửi yêu cầu AI';
-                buttonSpinner.classList.add('hidden');
+            if (buttonSpinner) buttonSpinner.classList.toggle('hidden', !isLoading);
+            if (buttonText) buttonText.textContent = isLoading ? 'Đang xử lý...' : 'Gửi yêu cầu AI';
+        }
+
+        async function generateInitialPrompt() {
+            const ideaInput = document.getElementById('ideaInput');
+            const userIdea = ideaInput.value.trim();
+            if (!userIdea) {
+                alert("Vui lòng nhập ý tưởng của bạn.");
+                return;
+            }
+
+            const generateBtnText = document.getElementById('generateBtnText');
+            const generateSpinner = document.getElementById('generateSpinner');
+            generatePromptBtn.disabled = true;
+            generateBtnText.textContent = 'Đang suy nghĩ...';
+            generateSpinner.classList.remove('hidden');
+
+            const metaPrompt = `You are an expert Senior Frontend Developer and Prompt Engineer. Your goal is to transform a user's simple idea into a comprehensive, professional, and highly detailed 'initial prompt'. This prompt will be used by another AI to generate the actual code for a web application with HTML, CSS, and JavaScript files.
+
+Follow these core principles:
+1.  **Specificity:** Break down the request into small, actionable steps for each file.
+2.  **Completeness:** Ensure all necessary HTML elements, CSS styles, and JavaScript logic are included to make the application functional from the start.
+3.  **Best Practices:** Instruct the AI to use modern web standards like semantic HTML, clean CSS, and well-structured JavaScript with event listeners.
+4.  **User Experience:** The generated app should be user-friendly with clear labels, buttons, and initial states.
+
+---
+HERE IS AN EXAMPLE of how to transform an idea into a great prompt.
+**User Idea Example:** "A simple counter app"
+**Your Generated Prompt Example:**
+\`\`\`
+Create a functional counter application. This requires changes across multiple files.
+
+1.  **In \`index.html\`:**
+    * Clear the body and create a main container with a class "counter-container".
+    * Add an \`<h1>\` with the text "Counter App".
+    * Add a \`<h2>\` with an id of "counterDisplay" and initial text "0".
+    * Add a container for buttons. Inside it, add two buttons: one with id "decrementBtn" and text "-", and one with id "incrementBtn" and text "+".
+
+2.  **In \`src/css/style.css\`:**
+    * Apply styling to the body for centering content vertically and horizontally and add a pleasant background color.
+    * Style the ".counter-container" with a border, padding, and box-shadow to make it look like a card.
+    * Style the counter display (\`#counterDisplay\`) with a large, bold font size and some margin.
+    * Style the buttons to be clean, with rounded corners, padding, and a subtle hover effect.
+
+3.  **In \`src/js/script.js\`:**
+    * Add a DOMContentLoaded event listener to ensure the script runs after the HTML is loaded.
+    * Inside the listener, create a state variable \`let count = 0;\`.
+    * Get references to the three DOM elements: the display, the increment button, and the decrement button.
+    * Create a function \`updateDisplay()\` that sets the textContent of the display element to the current \`count\`.
+    * Add a 'click' event listener to the increment button. When clicked, it should increase \`count\` by 1 and then call \`updateDisplay()\`.
+    * Add a 'click' event listener to the decrement button. When clicked, it should decrease \`count\` by 1 and then call \`updateDisplay()\`.
+    * Call \`updateDisplay()\` once at the start to ensure the initial value of 0 is displayed correctly.
+\`\`\`
+---
+
+Now, based on these principles and the example, generate a similar high-quality initial prompt for the following user's idea. Output only the generated prompt text, without any extra explanations.
+
+**User's Idea:** "${userIdea}"`;
+
+            try {
+                const result = await aiModel.generateContent(metaPrompt);
+                const generatedPrompt = result.response.text();
+                document.getElementById('generatedPromptOutput').value = generatedPrompt;
+            } catch (error) {
+                console.error("Error generating prompt:", error);
+                document.getElementById('generatedPromptOutput').value = "Đã xảy ra lỗi khi tạo kế hoạch. Vui lòng thử lại.";
+            } finally {
+                generatePromptBtn.disabled = false;
+                generateBtnText.textContent = 'Tạo Kế hoạch Chi tiết';
+                generateSpinner.classList.add('hidden');
             }
         }
+
+        // --- Initialization ---
+        window.onload = function() {
+            statusEl.textContent = "Đang khởi tạo trình soạn thảo...";
+            
+            require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' }});
+            require(['vs/editor/editor.main'], function() {
+                const sampleFiles = {
+                    'index.html': `<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <title>Dự án Mẫu</title>\n    <link rel="stylesheet" href="src/css/style.css">\n</head>\n<body>\n    <h1>Chào mừng!</h1>\n    <script src="src/js/script.js"><\/script>\n</body>\n</html>`,
+                    'src/css/style.css': `body {\n    font-family: sans-serif;\n}`,
+                    'src/js/script.js': `console.log("Hello World!");`
+                };
+
+                function createModelsFromStructure(structure, pathPrefix = '') {
+                    Object.entries(structure).forEach(([name, item]) => {
+                        const currentPath = pathPrefix ? `${pathPrefix}/${name}` : name;
+                        if (item.type === 'file') {
+                            const model = monaco.editor.createModel(
+                                sampleFiles[currentPath] || "",
+                                getLanguageForFile(currentPath)
+                            );
+                            model.onDidChangeContent(updatePreview);
+                            projectModels[currentPath] = model;
+                        } else if (item.children) {
+                            createModelsFromStructure(item.children, currentPath);
+                        }
+                    });
+                }
+                createModelsFromStructure(projectStructure);
+                
+                monacoEditor = monaco.editor.create(editorContainer, {
+                    model: projectModels[activeFilePath],
+                    theme: 'vs-light',
+                    automaticLayout: true
+                });
+
+                renderFileExplorer();
+                updatePreview();
+
+                // Attach global event listeners
+                fileExplorer.addEventListener('contextmenu', showContextMenu);
+                document.addEventListener('click', hideContextMenu);
+                openModalBtn.addEventListener('click', () => {
+                    previewModal.classList.remove('hidden');
+                    updatePreview();
+                    setPreviewMode('desktop');
+                });
+                closeModalBtn.addEventListener('click', () => {
+                    previewModal.classList.add('hidden');
+                });
+                desktopViewBtn.addEventListener('click', () => setPreviewMode('desktop'));
+                mobileViewBtn.addEventListener('click', () => setPreviewMode('mobile'));
+                openIdeaModalBtn.addEventListener('click', () => ideaModal.classList.remove('hidden'));
+                closeIdeaModalBtn.addEventListener('click', () => ideaModal.classList.add('hidden'));
+                generatePromptBtn.addEventListener('click', generateInitialPrompt);
+                copyAndPasteBtn.addEventListener('click', () => {
+                    const output = document.getElementById('generatedPromptOutput');
+                    const mainInput = document.getElementById('aiPromptInput');
+                    output.select();
+                    document.execCommand('copy');
+                    mainInput.value = output.value;
+                    ideaModal.classList.add('hidden');
+                    alert('Đã sao chép & dán kế hoạch vào ô Điều khiển!');
+                });
+                
+                // Initialize AI
+                try {
+                    const app = initializeApp(firebaseConfig);
+                    const ai = getAI(app, { backend: new GoogleAIBackend() });
+                    aiModel = getGenerativeModel(ai, { model: "gemini-2.5-flash" });
+                    runAiBtn.disabled = false;
+                    runAiBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                    runAiBtn.addEventListener('click', getAiSuggestion);
+                    statusEl.textContent = "Hệ thống đã sẵn sàng. Nhấp chuột phải vào cây thư mục để bắt đầu.";
+                } catch (e) {
+                    statusEl.textContent = `Lỗi khởi tạo AI: ${e.message}`;
+                    console.error(e);
+                }
+            });
+        };
     </script>
 </body>
 </html>
-```
