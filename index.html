@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototype Động - Sửa code bất kỳ với AI (v21.2 - Hoàn thiện)</title>
+    <title>Prototype Động - Sửa code bất kỳ với AI (v21.5 - Sửa lỗi Phóng to)</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
@@ -61,10 +61,20 @@
                 </div>
             </header>
 
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div id="main-grid" class="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <!-- Cột 1: Trình soạn thảo -->
-                <div class="flex flex-col">
-                    <h2 class="text-xl font-semibold text-gray-700 mb-2">1. Dự án</h2>
+                <div id="editor-column" class="flex flex-col">
+                    <div class="flex justify-between items-center mb-2">
+                        <h2 class="text-xl font-semibold text-gray-700">1. Dự án</h2>
+                        <button id="toggle-editor-view-btn" title="Phóng to/Thu nhỏ Trình soạn thảo" class="p-2 rounded-full hover:bg-gray-200">
+                            <svg id="icon-maximize" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1v4m0 0h-4m4-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 1v-4m0 0h-4m4 4l-5-5" />
+                            </svg>
+                            <svg id="icon-minimize" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </button>
+                    </div>
                     <div class="flex flex-grow border border-gray-300 rounded-lg shadow-md min-h-[600px]">
                         <div id="fileExplorer" class="w-1/3 max-w-xs bg-gray-50 p-2 border-r border-gray-300 overflow-y-auto"></div>
                         <div id="editorContainer" class="flex-grow"></div>
@@ -72,7 +82,7 @@
                 </div>
 
                 <!-- Cột 2: AI và các chức năng khác -->
-                <div class="flex flex-col">
+                <div id="ai-column" class="flex flex-col">
                     <div class="bg-indigo-50 p-6 rounded-lg border border-indigo-200 h-full">
                          <div class="flex justify-between items-center">
                             <h2 class="text-xl font-semibold text-gray-700">2. Điều khiển AI</h2>
@@ -82,6 +92,12 @@
                         </div>
                         <p class="text-sm text-gray-500 mb-4">Nhập yêu cầu của bạn, hoặc dùng Trợ lý Khởi tạo (💡) để bắt đầu.</p>
                         <textarea id="aiPromptInput" class="w-full p-2 border rounded-md" rows="5"></textarea>
+                        
+                        <div class="mt-2 flex items-center">
+                            <input id="focus-mode-checkbox" type="checkbox" class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                            <label for="focus-mode-checkbox" class="ml-2 block text-sm text-gray-900">Chỉ làm việc trên vùng đã chọn</label>
+                        </div>
+
                         <button id="runAiBtn" class="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-5 rounded-lg flex items-center justify-center">
                             <span id="buttonText">Gửi yêu cầu AI</span>
                             <div id="buttonSpinner" class="spinner hidden ml-3"></div>
@@ -174,6 +190,7 @@
         let undoStacks = {};
         let currentProjectId = null;
         let currentProjectName = null;
+        let isEditorMaximized = false;
 
         // --- DOM Elements ---
         const authScreen = document.getElementById('auth-screen');
@@ -186,6 +203,13 @@
         const openModalBtn = document.getElementById('openModalBtn');
         const aiResponseContainer = document.getElementById('aiResponseContainer');
         const aiResponsePlaceholder = document.getElementById('aiResponsePlaceholder');
+        const focusModeCheckbox = document.getElementById('focus-mode-checkbox');
+        const mainGrid = document.getElementById('main-grid');
+        const editorColumn = document.getElementById('editor-column');
+        const aiColumn = document.getElementById('ai-column');
+        const toggleEditorViewBtn = document.getElementById('toggle-editor-view-btn');
+        const iconMaximize = document.getElementById('icon-maximize');
+        const iconMinimize = document.getElementById('icon-minimize');
         const previewModal = document.getElementById('previewModal');
         const closeModalBtn = document.getElementById('closeModalBtn');
         const desktopViewBtn = document.getElementById('desktopViewBtn');
@@ -234,7 +258,7 @@
                 attachAppEventListeners();
                 
                 try {
-                    aiModel = getGenerativeModel(getAI(app), { model: "gemini-2.5-flash" });
+                    aiModel = getGenerativeModel(getAI(app), { model: "gemini-1.5-flash-latest" });
                     statusEl.textContent = "Hệ thống đã sẵn sàng.";
                 } catch (e) {
                     statusEl.textContent = `Lỗi khởi tạo AI: ${e.message}`;
@@ -279,7 +303,6 @@
             });
 
             if (currentProjectId) {
-                // Save a new version
                 const commitMessage = prompt("Nhập ghi chú cho phiên bản này (ví dụ: 'Thêm nút đăng nhập'):", "");
                 if (commitMessage === null) return;
 
@@ -312,7 +335,6 @@
                 }
 
             } else {
-                // Save a new project
                 const projectName = prompt("Nhập tên dự án mới:");
                 if (!projectName) return;
 
@@ -750,11 +772,36 @@
 
             try {
                 let projectContext = '';
-                Object.entries(projectModels).forEach(([path, model]) => {
-                    projectContext += `--- START OF ${path} ---\n${model.getValue()}\n--- END OF ${path} ---\n\n`;
-                });
+                let finalPrompt = '';
+                const isFocusMode = focusModeCheckbox.checked;
+                const selection = monacoEditor.getSelection();
+                const selectedText = monacoEditor.getModel().getValueInRange(selection);
 
-                const finalPrompt = `You are an expert code modification and creation assistant. Analyze the user's request based on the project files.
+                if (isFocusMode) {
+                    if (!selectedText) {
+                        throw new Error("Chế độ Tập trung đang bật. Vui lòng bôi đen một đoạn code.");
+                    }
+                    projectContext = `The user has selected the following code snippet from the file \`${activeFilePath}\`:\n\`\`\`\n${selectedText}\n\`\`\``;
+                    finalPrompt = `You are an expert code modification assistant. Your task is to modify the provided code snippet based on the user's request.
+CODE SNIPPET:
+${projectContext}
+USER'S REQUEST:
+"${userPrompt}"
+TASK:
+Generate a JSON object with a "changes" array containing a single modification object.
+- The "action" must be "modify".
+- The "file" must be "${activeFilePath}".
+- The "oldCode" MUST be the entire original code snippet provided.
+- The "newCode" MUST be the complete, modified version of the snippet.
+**CRITICAL JSON FORMATTING RULES:**
+- All values must be valid JSON strings (newlines escaped as \\n, quotes as \\").
+Wrap the final JSON in \`\`\`json ... \`\`\`.`;
+
+                } else {
+                    Object.entries(projectModels).forEach(([path, model]) => {
+                        projectContext += `--- START OF ${path} ---\n${model.getValue()}\n--- END OF ${path} ---\n\n`;
+                    });
+                    finalPrompt = `You are an expert code modification and creation assistant. Analyze the user's request based on the project files.
 PROJECT FILES:
 ${projectContext}
 CURRENT USER'S REQUEST:
@@ -764,11 +811,9 @@ Generate a JSON object with a "changes" array. Each object in the array represen
 - For MODIFICATIONS: { "action": "modify", "file": "path/to/file.ext", "description": "...", "oldCode": "...", "newCode": "..." }
 - For NEW FILES: { "action": "create", "file": "path/to/new_file.ext", "description": "...", "newCode": "..." }
 **CRITICAL JSON FORMATTING RULES:**
-- The final output MUST be a single JSON object inside a markdown block.
-- All values in the JSON object MUST be valid JSON strings.
-- This means all newline characters within "oldCode" and "newCode" MUST be escaped as \\n.
-- All double quotes within "oldCode" and "newCode" MUST be escaped as \\".
+- All values MUST be valid JSON strings (newlines escaped as \\n, quotes as \\").
 Wrap the final JSON in \`\`\`json ... \`\`\`.`;
+                }
 
                 const result = await aiModel.generateContent(finalPrompt);
                 const jsonString = result.response.text().match(/```json\s*([\s\S]*?)\s*```/)?.[1].trim();
@@ -859,10 +904,23 @@ Wrap the final JSON in \`\`\`json ... \`\`\`.`;
                     alert(`Không tìm thấy tệp ${change.file}`);
                     return;
                 }
-                const match = targetModel.findMatches(change.oldCode, false, false, true, null, true)[0];
-                if (match) {
+
+                const isFocusMode = focusModeCheckbox.checked;
+                const selection = monacoEditor.getSelection();
+                
+                let matchRange;
+                if (isFocusMode && !selection.isEmpty() && change.file === activeFilePath) {
+                    matchRange = selection;
+                } else {
+                    const match = targetModel.findMatches(change.oldCode, false, false, true, null, true)[0];
+                    if (match) {
+                        matchRange = match.range;
+                    }
+                }
+
+                if (matchRange) {
                     let inverseEdits = [];
-                    targetModel.pushEditOperations([], [{ range: match.range, text: change.newCode }], (inverse) => { inverseEdits = inverse; return null; });
+                    targetModel.pushEditOperations([], [{ range: matchRange, text: change.newCode }], (inverse) => { inverseEdits = inverse; return null; });
                     
                     undoStacks[change.uniqueId] = { action: 'modify', path: change.file, edits: inverseEdits };
 
@@ -1015,6 +1073,15 @@ Now, based on these principles and the example, generate a similar high-quality 
                     loadInitialProject();
                 }
             });
+            toggleEditorViewBtn.addEventListener('click', () => {
+                isEditorMaximized = !isEditorMaximized;
+                mainGrid.classList.toggle('lg:grid-cols-2', !isEditorMaximized);
+                mainGrid.classList.toggle('lg:grid-cols-1', isEditorMaximized);
+                aiColumn.classList.toggle('hidden', isEditorMaximized);
+                editorColumn.classList.toggle('lg:col-span-2', isEditorMaximized);
+                iconMaximize.classList.toggle('hidden', isEditorMaximized);
+                iconMinimize.classList.toggle('hidden', !isEditorMaximized);
+            });
         }
         
         // Attach auth listeners immediately on load
@@ -1039,6 +1106,10 @@ Now, based on these principles and the example, generate a similar high-quality 
             }
         });
 
+        // --- Initialization ---
+        window.onload = function() {
+            // Don't initialize editor here, wait for auth state
+        };
     </script>
 </body>
 </html>
