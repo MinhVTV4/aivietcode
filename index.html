@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototype Động - Sửa code bất kỳ với AI (v25.0 - Format Fix)</title>
+    <title>Prototype Động - Sửa code bất kỳ với AI (v27.0 - Creative Assistant)</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
@@ -31,6 +31,27 @@
             width: 50px;
             height: 50px;
             animation: spin 1s linear infinite;
+        }
+
+        /* Chat bubble styles */
+        .chat-bubble {
+            max-width: 80%;
+            padding: 0.75rem 1rem;
+            border-radius: 1rem;
+            margin-bottom: 0.5rem;
+            word-wrap: break-word;
+        }
+        .chat-bubble-user {
+            background-color: #4338ca; /* Indigo-700 */
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 0.25rem;
+        }
+        .chat-bubble-ai {
+            background-color: #e5e7eb; /* Gray-200 */
+            color: #1f2937; /* Gray-800 */
+            align-self: flex-start;
+            border-bottom-left-radius: 0.25rem;
         }
     </style>
 </head>
@@ -60,10 +81,11 @@
                     <h1 class="text-3xl font-bold text-gray-800">Prototype Động: <span id="project-name-display">Dự án Mới</span></h1>
                     <p id="user-email" class="text-sm text-gray-500 mt-1"></p>
                 </div>
-                <div class="flex gap-2">
-                    <button id="new-project-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg">Dự án Mới</button>
+                <div class="flex flex-wrap gap-2">
+                    <button id="new-project-btn" class="bg-yellow-400 hover:bg-yellow-500 text-gray-800 font-bold py-2 px-4 rounded-lg">Dự án Mới (AI)</button>
                     <button id="save-project-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Lưu dự án</button>
                     <button id="load-project-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">Mở dự án</button>
+                    <button id="export-code-btn" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg">Xuất file HTML</button>
                     <button id="logout-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg">Đăng xuất</button>
                 </div>
             </header>
@@ -82,12 +104,12 @@
                 <div class="flex flex-col">
                     <div class="bg-indigo-50 p-6 rounded-lg border border-indigo-200 h-full">
                          <div class="flex justify-between items-center">
-                            <h2 class="text-xl font-semibold text-gray-700">2. Điều khiển AI</h2>
-                            <button id="openIdeaModalBtn" title="Khởi tạo Dự án từ Ý tưởng" class="bg-yellow-400 hover:bg-yellow-500 text-gray-800 font-bold p-2 rounded-full shadow-md transition duration-300">
+                            <h2 class="text-xl font-semibold text-gray-700">2. Điều khiển AI (Sửa lỗi)</h2>
+                            <button id="openIdeaModalBtn" title="Khởi tạo Dự án từ Ý tưởng" class="bg-yellow-400 hover:bg-yellow-500 text-gray-800 font-bold p-2 rounded-full shadow-md transition duration-300 hidden">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a1 1 0 011 1v1.01a5.002 5.002 0 014.37 4.373H16a1 1 0 110 2h-1.01a5.002 5.002 0 01-4.37 4.373V17a1 1 0 11-2 0v-1.01a5.002 5.002 0 01-4.37-4.373H4a1 1 0 110-2h1.01A5.002 5.002 0 019.38 3.01V2a1 1 0 011-1zM4 10a6 6 0 1112 0 6 6 0 01-12 0z" /></svg>
                             </button>
                         </div>
-                        <p class="text-sm text-gray-500 mb-4">Nhập yêu cầu của bạn, hoặc dùng Trợ lý Khởi tạo (💡) để bắt đầu.</p>
+                        <p class="text-sm text-gray-500 mb-4">Nhập yêu cầu để sửa đổi dự án hiện tại.</p>
                         <textarea id="aiPromptInput" class="w-full p-2 border rounded-md" rows="5"></textarea>
                         
                         <div class="mt-2 flex items-center">
@@ -139,21 +161,28 @@
         </div>
     </div>
 
-    <!-- Idea Modal -->
-    <div id="ideaModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-75">
-        <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl flex flex-col">
+    <!-- New Project Chat Modal -->
+    <div id="newProjectChatModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-75">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl flex flex-col h-[90vh]">
             <div class="flex justify-between items-center p-4 border-b">
-                <h3 class="text-xl font-semibold text-gray-800">Trợ lý Khởi tạo Dự án</h3>
-                <button id="closeIdeaModalBtn" class="text-gray-400 hover:text-gray-600">&times;</button>
+                <h3 class="text-xl font-semibold text-gray-800">Trợ lý Sáng tạo Dự án</h3>
+                <button id="closeNewProjectModalBtn" class="text-gray-400 hover:text-gray-600">&times;</button>
             </div>
-            <div class="p-6 space-y-4">
-                <textarea id="ideaInput" rows="3" class="w-full p-2 border rounded-md" placeholder="Ví dụ: ứng dụng web về mô phỏng thí nghiệm hóa học"></textarea>
-                <button id="generatePromptBtn" class="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center">
-                    <span id="generateBtnText">Tạo Kế hoạch</span>
-                    <div id="generateSpinner" class="spinner hidden ml-3"></div>
-                </button>
-                <textarea id="generatedPromptOutput" rows="10" class="w-full p-2 border rounded-md bg-gray-50" readonly></textarea>
-                <button id="copyAndPasteBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Sao chép & Dán</button>
+            <div id="newProjectChatHistory" class="p-6 flex-grow overflow-y-auto flex flex-col gap-4">
+                <!-- Chat messages will be appended here -->
+            </div>
+            <div class="p-4 border-t bg-gray-50">
+                <textarea id="newProjectChatInput" rows="2" class="w-full p-2 border rounded-md" placeholder="Mô tả ý tưởng của bạn..."></textarea>
+                <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <button id="newProjectDiscussBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center">
+                        <span id="newProjectDiscussBtnText">Thảo luận</span>
+                        <div id="newProjectDiscussSpinner" class="spinner hidden ml-3"></div>
+                    </button>
+                    <button id="newProjectGenerateBtn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center">
+                        <span id="newProjectGenerateBtnText">Tạo Dự án từ cuộc trò chuyện</span>
+                        <div id="newProjectGenerateSpinner" class="spinner hidden ml-3"></div>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -219,7 +248,8 @@
         let undoStacks = {};
         let currentProjectId = null;
         let currentProjectName = null;
-        let activeDiffEditors = []; // To manage Diff Editor instances
+        let activeDiffEditors = [];
+        let newProjectChatHistory = []; // For the new project chat modal
 
         // --- DOM Elements ---
         const authScreen = document.getElementById('auth-screen');
@@ -236,12 +266,8 @@
         const closeModalBtn = document.getElementById('closeModalBtn');
         const desktopViewBtn = document.getElementById('desktopViewBtn');
         const mobileViewBtn = document.getElementById('mobileViewBtn');
-        const openIdeaModalBtn = document.getElementById('openIdeaModalBtn');
-        const ideaModal = document.getElementById('ideaModal');
-        const closeIdeaModalBtn = document.getElementById('closeIdeaModalBtn');
-        const generatePromptBtn = document.getElementById('generatePromptBtn');
-        const copyAndPasteBtn = document.getElementById('copyAndPasteBtn');
         const focusModeCheckbox = document.getElementById('focus-mode-checkbox');
+        const newProjectChatModal = document.getElementById('newProjectChatModal');
 
         // --- Firebase Initialization ---
         const app = initializeApp(firebaseConfig);
@@ -297,6 +323,24 @@
             currentProjectName = "Dự án Mới";
             updateProjectDisplay();
 
+            const sampleFiles = {
+                'index.html': `<!DOCTYPE html>\n<html lang="en">\n<head>\n    <title>Dự án Mới</title>\n    <link rel="stylesheet" href="src/css/style.css">\n</head>\n<body>\n    <h1>Chào mừng!</h1>\n    <script src="src/js/script.js"><\/script>\n</body>\n</html>`,
+                'src/css/style.css': `body {\n    font-family: sans-serif;\n}`,
+                'src/js/script.js': `console.log("Hello World!");`
+            };
+            loadProjectFromData(sampleFiles);
+        }
+
+        function loadProjectFromData(filesData) {
+            // Dispose old models if they exist
+            if (projectModels) {
+                Object.values(projectModels).forEach(model => model.dispose());
+            }
+            projectModels = {};
+            currentProjectId = null;
+            currentProjectName = "Dự án Mới";
+            updateProjectDisplay();
+
             projectStructure = {
                 'index.html': { type: 'file' },
                 'src': { type: 'folder', isOpen: true, children: {
@@ -304,12 +348,8 @@
                     'js': { type: 'folder', isOpen: true, children: { 'script.js': { type: 'file' } } }
                 }}
             };
-            const sampleFiles = {
-                'index.html': `<!DOCTYPE html>\n<html lang="en">\n<head>\n    <title>Dự án Mới</title>\n    <link rel="stylesheet" href="src/css/style.css">\n</head>\n<body>\n    <h1>Chào mừng!</h1>\n    <script src="src/js/script.js"><\/script>\n</body>\n</html>`,
-                'src/css/style.css': `body {\n    font-family: sans-serif;\n}`,
-                'src/js/script.js': `console.log("Hello World!");`
-            };
-            createModelsFromStructure(projectStructure, sampleFiles);
+            
+            createModelsFromStructure(projectStructure, filesData);
             activeFilePath = 'index.html';
             if(monacoEditor) {
                 monacoEditor.setModel(projectModels[activeFilePath]);
@@ -753,33 +793,52 @@
             renderFileExplorer();
         }
 
-        // --- Preview Logic ---
+        // --- Preview & Export Logic ---
+        function getBuiltHtml() {
+            let htmlContent = projectModels['index.html']?.getValue() || '';
+            
+            const linkRegex = /<link\s+.*?href="([^"]+)"[^>]*>/g;
+            const scriptRegex = /<script\s+.*?src="([^"]+)"[^>]*><\/script>/g;
+
+            htmlContent = htmlContent.replace(linkRegex, (match, href) => {
+                const cssContent = projectModels[href]?.getValue();
+                return cssContent ? `<style>\n${cssContent}\n</style>` : match;
+            });
+
+            htmlContent = htmlContent.replace(scriptRegex, (match, src) => {
+                if (!src) return match;
+                const jsContent = projectModels[src]?.getValue();
+                return jsContent ? `<script>${jsContent.replace(/<\/script>/g, '<\\/script>')}<\/script>` : match;
+            });
+            return htmlContent;
+        }
+
         function updatePreview() {
             try {
                 const frame = document.getElementById('previewFrame');
                 if (!frame) return;
-
-                let htmlContent = projectModels['index.html']?.getValue() || '';
-                
-                const linkRegex = /<link\s+.*?href="([^"]+)"[^>]*>/g;
-                const scriptRegex = /<script\s+.*?src="([^"]+)"[^>]*><\/script>/g;
-
-                htmlContent = htmlContent.replace(linkRegex, (match, href) => {
-                    const cssContent = projectModels[href]?.getValue();
-                    return cssContent ? `<style>\n${cssContent}\n</style>` : match;
-                });
-
-                htmlContent = htmlContent.replace(scriptRegex, (match, src) => {
-                    const jsContent = projectModels[src]?.getValue();
-                    return jsContent ? `<script>${jsContent.replace(/<\/script>/g, '<\\/script>')}<\/script>` : match;
-                });
-
-                frame.srcdoc = htmlContent;
+                frame.srcdoc = getBuiltHtml();
             } catch (e) { 
                 console.error("Lỗi khi cập nhật xem trước:", e);
             }
         }
         
+        async function exportProjectAsHtml() {
+            try {
+                const htmlContent = getBuiltHtml();
+                const textarea = document.createElement('textarea');
+                textarea.value = htmlContent;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                await showAlert('Thành công!', 'Toàn bộ code dự án (dưới dạng một file HTML) đã được sao chép vào clipboard của bạn.');
+            } catch (e) { 
+                console.error("Lỗi khi xuất code:", e);
+                await showAlert('Lỗi', 'Đã có lỗi xảy ra khi sao chép code.');
+            }
+        }
+
         function setPreviewMode(mode) {
             const frame = document.getElementById('previewFrame');
             if (mode === 'desktop') {
@@ -791,7 +850,7 @@
             }
         }
 
-        // --- AI Interaction Logic ---
+        // --- AI Interaction Logic (Editing) ---
         async function getAiSuggestion() {
             undoStacks = {};
             const userPrompt = document.getElementById('aiPromptInput').value.trim();
@@ -1054,73 +1113,120 @@ Wrap the final JSON in \`\`\`json ... \`\`\`.`;
             if (buttonText) buttonText.textContent = isLoading ? 'Đang xử lý...' : 'Gửi yêu cầu AI';
         }
 
-        async function generateInitialPrompt() {
-            const ideaInput = document.getElementById('ideaInput');
-            const userIdea = ideaInput.value.trim();
-            if (!userIdea) {
-                showAlert("Thiếu thông tin", "Vui lòng nhập ý tưởng của bạn.");
+        // --- New Project Creation Logic ---
+        function openNewProjectChatModal() {
+            newProjectChatHistory = [];
+            const chatHistoryEl = document.getElementById('newProjectChatHistory');
+            chatHistoryEl.innerHTML = '';
+            addMessageToNewProjectChat('ai', 'Chào bạn! Hãy mô tả ý tưởng về trang web bạn muốn tạo. Tôi sẽ giúp bạn biến nó thành hiện thực.');
+            document.getElementById('newProjectChatInput').value = '';
+            newProjectChatModal.classList.remove('hidden');
+        }
+
+        function addMessageToNewProjectChat(role, text) {
+            newProjectChatHistory.push({ role, text });
+            const chatHistoryEl = document.getElementById('newProjectChatHistory');
+            const messageEl = document.createElement('div');
+            messageEl.className = `chat-bubble ${role === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}`;
+            messageEl.textContent = text;
+            chatHistoryEl.appendChild(messageEl);
+            chatHistoryEl.scrollTop = chatHistoryEl.scrollHeight;
+        }
+
+        async function handleNewProjectDiscussion() {
+            const inputEl = document.getElementById('newProjectChatInput');
+            const userMessage = inputEl.value.trim();
+            if (!userMessage) return;
+
+            addMessageToNewProjectChat('user', userMessage);
+            inputEl.value = '';
+
+            const discussBtn = document.getElementById('newProjectDiscussBtn');
+            const spinner = document.getElementById('newProjectDiscussSpinner');
+            const btnText = document.getElementById('newProjectDiscussBtnText');
+
+            discussBtn.disabled = true;
+            btnText.textContent = 'AI đang nghĩ...';
+            spinner.classList.remove('hidden');
+
+            try {
+                const prompt = `Bạn là một chuyên gia tư vấn và phát triển web. Người dùng muốn tạo một dự án web mới. Dưới đây là cuộc trò chuyện của chúng ta. Hãy tiếp tục thảo luận, đặt câu hỏi để làm rõ yêu cầu, hoặc đưa ra gợi ý.
+                
+                Lịch sử trò chuyện:
+                ${newProjectChatHistory.map(m => `${m.role}: ${m.text}`).join('\n')}
+                
+                Hãy trả lời một cách ngắn gọn, thân thiện để tiếp tục cuộc thảo luận.`;
+
+                const result = await aiModel.generateContent(prompt);
+                const aiResponse = result.response.text();
+                addMessageToNewProjectChat('ai', aiResponse);
+            } catch (error) {
+                console.error("Lỗi thảo luận dự án mới:", error);
+                addMessageToNewProjectChat('ai', 'Xin lỗi, đã có lỗi xảy ra. Vui lòng thử lại.');
+            } finally {
+                discussBtn.disabled = false;
+                btnText.textContent = 'Thảo luận';
+                spinner.classList.add('hidden');
+            }
+        }
+
+        async function handleGenerateProjectFromChat() {
+            if (newProjectChatHistory.length < 2) {
+                showAlert("Thiếu thông tin", "Vui lòng thảo luận thêm về ý tưởng của bạn trước khi tạo dự án.");
                 return;
             }
 
-            const generateBtnText = document.getElementById('generateBtnText');
-            const generateSpinner = document.getElementById('generateSpinner');
-            generatePromptBtn.disabled = true;
-            generateBtnText.textContent = 'Đang suy nghĩ...';
-            generateSpinner.classList.remove('hidden');
+            const generateBtn = document.getElementById('newProjectGenerateBtn');
+            const spinner = document.getElementById('newProjectGenerateSpinner');
+            const btnText = document.getElementById('newProjectGenerateBtnText');
 
-            const metaPrompt = `You are an expert Senior Frontend Developer and Prompt Engineer. Your goal is to transform a user's simple idea into a comprehensive, professional, and highly detailed 'initial prompt'. This prompt will be used by another AI to generate the actual code for a web application with HTML, CSS, and JavaScript files.
-
-Follow these core principles:
-1.  **Specificity:** Break down the request into small, actionable steps for each file.
-2.  **Completeness:** Ensure all necessary HTML elements, CSS styles, and JavaScript logic are included to make the application functional from the start.
-3.  **Best Practices:** Instruct the AI to use modern web standards like semantic HTML, clean CSS, and well-structured JavaScript with event listeners.
-4.  **User Experience:** The generated app should be user-friendly with clear labels, buttons, and initial states.
----
-HERE IS AN EXAMPLE of how to transform an idea into a great prompt.
-**User Idea Example:** "A simple counter app"
-**Your Generated Prompt Example:**
-\`\`\`
-Create a functional counter application. This requires changes across multiple files.
-
-1.  **In \`index.html\`:**
-    * Clear the body and create a main container with a class "counter-container".
-    * Add an \`<h1>\` with the text "Counter App".
-    * Add a \`<h2>\` with an id of "counterDisplay" and initial text "0".
-    * Add a container for buttons. Inside it, add two buttons: one with id "decrementBtn" and text "-", and one with id "incrementBtn" and text "+".
-
-2.  **In \`src/css/style.css\`:**
-    * Apply styling to the body for centering content vertically and horizontally and add a pleasant background color.
-    * Style the ".counter-container" with a border, padding, and box-shadow to make it look like a card.
-    * Style the counter display (\`#counterDisplay\`) with a large, bold font size and some margin.
-    * Style the buttons to be clean, with rounded corners, padding, and a subtle hover effect.
-
-3.  **In \`src/js/script.js\`:**
-    * Add a DOMContentLoaded event listener to ensure the script runs after the HTML is loaded.
-    * Inside the listener, create a state variable \`let count = 0;\`.
-    * Get references to the three DOM elements: the display, the increment button, and the decrement button.
-    * Create a function \`updateDisplay()\` that sets the textContent of the display element to the current \`count\`.
-    * Add a 'click' event listener to the increment button. When clicked, it should increase \`count\` by 1 and then call \`updateDisplay()\`.
-    * Add a 'click' event listener to the decrement button. When clicked, it should decrease \`count\` by 1 and then call \`updateDisplay()\`.
-    * Call \`updateDisplay()\` once at the start to ensure the initial value of 0 is displayed correctly.
-\`\`\`
----
-Now, based on these principles and the example, generate a similar high-quality initial prompt for the following user's idea. Output only the generated prompt text, without any extra explanations.
-
-**User's Idea:** "${userIdea}"`;
+            generateBtn.disabled = true;
+            btnText.textContent = 'Đang tạo...';
+            spinner.classList.remove('hidden');
+            showLoader("AI đang tạo dự án của bạn...");
 
             try {
-                const result = await aiModel.generateContent(metaPrompt);
-                const generatedPrompt = result.response.text();
-                document.getElementById('generatedPromptOutput').value = generatedPrompt;
+                const prompt = `Dựa trên toàn bộ cuộc trò chuyện sau, hãy tạo ra code cho một dự án web hoàn chỉnh.
+                
+                Lịch sử trò chuyện:
+                ${newProjectChatHistory.map(m => `${m.role}: ${m.text}`).join('\n')}
+
+                Nhiệm vụ:
+                1. Phân tích toàn bộ yêu cầu của người dùng.
+                2. Tạo ra nội dung code đầy đủ cho 3 tệp: 'index.html', 'src/css/style.css', và 'src/js/script.js'.
+                3. Đảm bảo các tệp được liên kết với nhau đúng cách trong file HTML.
+                4. Trả về một đối tượng JSON duy nhất có cấu trúc như sau: { "index.html": "...", "src/css/style.css": "...", "src/js/script.js": "..." }.
+                **QUAN TRỌNG:** Chỉ trả về đối tượng JSON, không có bất kỳ văn bản hay giải thích nào khác.`;
+
+                const result = await aiModel.generateContent(prompt);
+                const jsonString = result.response.text().match(/```json\s*([\s\S]*?)\s*```/)?.[1].trim();
+                
+                if (!jsonString) {
+                    throw new Error("AI đã không trả về định dạng JSON hợp lệ.");
+                }
+
+                const filesData = JSON.parse(jsonString);
+                
+                if (!filesData['index.html'] || !filesData['src/css/style.css'] || !filesData['src/js/script.js']) {
+                    throw new Error("Đối tượng JSON trả về thiếu các tệp cần thiết.");
+                }
+
+                loadProjectFromData(filesData);
+                newProjectChatModal.classList.add('hidden');
+                statusEl.textContent = "Dự án mới đã được tạo thành công bởi AI!";
+                showAlert("Thành công!", "Dự án mới của bạn đã được tạo và nạp vào trình soạn thảo.");
+
             } catch (error) {
-                console.error("Error generating prompt:", error);
-                document.getElementById('generatedPromptOutput').value = "Đã xảy ra lỗi khi tạo kế hoạch. Vui lòng thử lại.";
+                console.error("Lỗi tạo dự án từ AI:", error);
+                showAlert("Lỗi", `Đã xảy ra lỗi khi tạo dự án: ${error.message}`);
             } finally {
-                generatePromptBtn.disabled = false;
-                generateBtnText.textContent = 'Tạo Kế hoạch Chi tiết';
-                generateSpinner.classList.add('hidden');
+                generateBtn.disabled = false;
+                btnText.textContent = 'Tạo Dự án từ cuộc trò chuyện';
+                spinner.classList.add('hidden');
+                hideLoader();
             }
         }
+
 
         // --- UI Helpers: Modals & Loaders ---
         const genericModal = document.getElementById('genericModal');
@@ -1216,6 +1322,7 @@ Now, based on these principles and the example, generate a similar high-quality 
             });
             document.getElementById('save-project-btn').addEventListener('click', saveProject);
             document.getElementById('load-project-btn').addEventListener('click', loadProjects);
+            document.getElementById('export-code-btn').addEventListener('click', exportProjectAsHtml);
             document.getElementById('closeLoadModalBtn').addEventListener('click', () => document.getElementById('loadProjectModal').classList.add('hidden'));
             fileExplorer.addEventListener('contextmenu', showContextMenu);
             document.addEventListener('click', (e) => {
@@ -1233,25 +1340,14 @@ Now, based on these principles and the example, generate a similar high-quality 
             });
             desktopViewBtn.addEventListener('click', () => setPreviewMode('desktop'));
             mobileViewBtn.addEventListener('click', () => setPreviewMode('mobile'));
-            openIdeaModalBtn.addEventListener('click', () => ideaModal.classList.remove('hidden'));
-            closeIdeaModalBtn.addEventListener('click', () => ideaModal.classList.add('hidden'));
-            generatePromptBtn.addEventListener('click', generateInitialPrompt);
-            copyAndPasteBtn.addEventListener('click', async () => {
-                const output = document.getElementById('generatedPromptOutput');
-                const mainInput = document.getElementById('aiPromptInput');
-                output.select();
-                document.execCommand('copy');
-                mainInput.value = output.value;
-                ideaModal.classList.add('hidden');
-                await showAlert('Thành công', 'Đã sao chép & dán kế hoạch vào ô Điều khiển!');
-            });
+            
+            // New Project Button
+            document.getElementById('new-project-btn').addEventListener('click', openNewProjectChatModal);
+            document.getElementById('closeNewProjectModalBtn').addEventListener('click', () => newProjectChatModal.classList.add('hidden'));
+            document.getElementById('newProjectDiscussBtn').addEventListener('click', handleNewProjectDiscussion);
+            document.getElementById('newProjectGenerateBtn').addEventListener('click', handleGenerateProjectFromChat);
+
             runAiBtn.addEventListener('click', getAiSuggestion);
-            document.getElementById('new-project-btn').addEventListener('click', async () => {
-                const confirmed = await showConfirm("Tạo dự án mới", "Bạn có chắc muốn tạo một dự án mới? Mọi thay đổi chưa lưu sẽ bị mất.");
-                if (confirmed) {
-                    loadInitialProject();
-                }
-            });
         }
         
         // Attach auth listeners immediately on load
