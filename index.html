@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototype Động - Sửa code bất kỳ với AI (v22.0 - UI/UX Cải tiến)</title>
+    <title>Prototype Động - Sửa code bất kỳ với AI (v23.0 - Diff Editor)</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
@@ -22,9 +22,6 @@
         #contextMenu { position: absolute; z-index: 1000; background-color: white; border: 1px solid #e5e7eb; border-radius: 0.375rem; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); padding: 0.5rem 0; min-width: 150px; }
         .context-menu-item { display: block; width: 100%; padding: 0.5rem 1rem; font-size: 0.875rem; text-align: left; }
         .context-menu-item:hover { background-color: #f3f4f6; }
-        .code-old { color: #B91C1C; }
-        .code-new { color: #047857; }
-        .change-group-header { font-weight: 600; margin-top: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #e5e7eb; }
         
         /* Fullscreen loader styles */
         .loader-spin {
@@ -222,6 +219,7 @@
         let undoStacks = {};
         let currentProjectId = null;
         let currentProjectName = null;
+        let activeDiffEditors = []; // To manage Diff Editor instances
 
         // --- DOM Elements ---
         const authScreen = document.getElementById('auth-screen');
@@ -328,9 +326,8 @@
             });
 
             if (currentProjectId) {
-                // Save a new version
                 const commitMessage = await showPrompt("Lưu phiên bản mới", "Nhập ghi chú cho phiên bản này (ví dụ: 'Thêm nút đăng nhập'):", "");
-                if (commitMessage === null) return; // User cancelled
+                if (commitMessage === null) return;
 
                 showLoader("Đang lưu phiên bản...");
                 try {
@@ -354,7 +351,6 @@
                     });
                     
                     statusEl.textContent = `Đã lưu phiên bản ${newVersionNumber} cho dự án "${currentProjectName}".`;
-
                 } catch (error) {
                     console.error("Lỗi khi lưu phiên bản mới:", error);
                     statusEl.textContent = "Lỗi khi lưu phiên bản mới.";
@@ -363,9 +359,8 @@
                 }
 
             } else {
-                // Save a new project
                 const projectName = await showPrompt("Tạo dự án mới", "Nhập tên dự án:", "Dự án của tôi");
-                if (!projectName) return; // User cancelled or entered empty name
+                if (!projectName) return;
 
                 showLoader("Đang tạo dự án...");
                 try {
@@ -390,7 +385,6 @@
                     currentProjectName = projectName;
                     updateProjectDisplay();
                     statusEl.textContent = `Đã tạo và lưu dự án "${projectName}" thành công.`;
-
                 } catch (error) {
                     console.error("Lỗi khi tạo dự án mới:", error);
                     statusEl.textContent = "Lỗi khi tạo dự án mới.";
@@ -875,6 +869,14 @@ Wrap the final JSON in \`\`\`json ... \`\`\`.`;
         }
 
         function renderChangeList(changes) {
+            // Dispose any existing diff editors to prevent memory leaks
+            activeDiffEditors.forEach(d => {
+                d.editor.dispose();
+                d.originalModel.dispose();
+                d.modifiedModel.dispose();
+            });
+            activeDiffEditors = [];
+
             aiResponseContainer.innerHTML = '';
             if (changes.length === 0) {
                 aiResponsePlaceholder.textContent = "AI không tìm thấy thay đổi nào.";
@@ -889,17 +891,13 @@ Wrap the final JSON in \`\`\`json ... \`\`\`.`;
                 card.id = change.uniqueId;
                 
                 if (change.action === 'create') {
-                    card.innerHTML = `<p class="font-semibold text-gray-800">${change.description}</p>
+                    card.innerHTML = `<p class="font-semibold text-gray-800">${change.description || 'Tạo tệp mới'}</p>
                                       <p class="text-sm text-gray-500 mt-2">Tạo tệp mới: <code class="font-mono bg-gray-200 p-1 rounded">${change.file}</code></p>
-                                      <pre class="code-new mt-2"><code></code></pre>`;
-                    card.querySelector('.code-new code').textContent = change.newCode;
+                                      <div class="mt-2 w-full h-64 border border-gray-300 rounded-md" id="editor-container-${change.uniqueId}"></div>`;
                 } else { // modify
-                    card.innerHTML = `<p class="font-semibold text-gray-800">${change.description}</p>
+                    card.innerHTML = `<p class="font-semibold text-gray-800">${change.description || 'Sửa đổi code'}</p>
                                       <p class="text-sm text-gray-500 mt-2">Trong tệp: <code class="font-mono bg-gray-200 p-1 rounded">${change.file}</code></p>
-                                      <div class="mt-2"><p class="text-sm font-medium text-gray-500">Code cũ:</p><pre class="code-old"><code></code></pre></div>
-                                      <div class="mt-2"><p class="text-sm font-medium text-gray-500">Code mới:</p><pre class="code-new"><code></code></pre></div>`;
-                    card.querySelector('.code-old code').textContent = change.oldCode;
-                    card.querySelector('.code-new code').textContent = change.newCode;
+                                      <div id="diff-container-${change.uniqueId}" class="mt-2 w-full h-64 border border-gray-300 rounded-md"></div>`;
                 }
                 
                 const applyButtonContainer = document.createElement('div');
@@ -915,6 +913,40 @@ Wrap the final JSON in \`\`\`json ... \`\`\`.`;
                 card.appendChild(applyButtonContainer);
                 card.appendChild(undoButtonContainer);
                 aiResponseContainer.appendChild(card);
+
+                // Initialize editor after the card is in the DOM
+                if (change.action === 'create') {
+                    const editorContainer = document.getElementById(`editor-container-${change.uniqueId}`);
+                    const viewOnlyEditor = monaco.editor.create(editorContainer, {
+                        value: change.newCode,
+                        language: getLanguageForFile(change.file),
+                        readOnly: true,
+                        automaticLayout: true,
+                        theme: 'vs-light'
+                    });
+                } else { // modify
+                    const diffContainer = document.getElementById(`diff-container-${change.uniqueId}`);
+                    const originalModel = monaco.editor.createModel(change.oldCode, getLanguageForFile(change.file));
+                    const modifiedModel = monaco.editor.createModel(change.newCode, getLanguageForFile(change.file));
+
+                    const diffEditor = monaco.editor.createDiffEditor(diffContainer, {
+                        enableSplitViewResizing: true,
+                        readOnly: true,
+                        automaticLayout: true,
+                        theme: 'vs-light'
+                    });
+
+                    diffEditor.setModel({
+                        original: originalModel,
+                        modified: modifiedModel
+                    });
+
+                    activeDiffEditors.push({
+                        editor: diffEditor,
+                        originalModel: originalModel,
+                        modifiedModel: modifiedModel
+                    });
+                }
             });
         }
 
@@ -968,7 +1000,7 @@ Wrap the final JSON in \`\`\`json ... \`\`\`.`;
 
                     statusEl.textContent = `Đã cập nhật tệp ${change.file}`;
                 } else {
-                    await showAlert("Lỗi", `Không tìm thấy mã cũ trong tệp ${change.file}`);
+                    await showAlert("Lỗi", `Không tìm thấy mã cũ trong tệp ${change.file}. Vui lòng thử áp dụng thủ công.`);
                     return;
                 }
             }
