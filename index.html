@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototype Động - Sửa code bất kỳ với AI (v31.1 - Line Ending Fix)</title>
+    <title>Prototype Động - Sửa code bất kỳ với AI (v34.1 - Stability Fix)</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
     
     <style>
@@ -52,6 +53,26 @@
             color: #1f2937; /* Gray-800 */
             align-self: flex-start;
             border-bottom-left-radius: 0.25rem;
+        }
+        .chat-bubble-ai pre {
+            background-color: #1f2937;
+            color: #e5e7eb;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            margin-top: 0.5rem;
+            font-size: 0.875rem;
+        }
+        .chat-bubble-ai code {
+            font-family: monospace;
+        }
+        .chat-bubble-ai ul, .chat-bubble-ai ol {
+            margin-left: 1.25rem;
+            margin-top: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .chat-bubble-ai p:last-child {
+            margin-bottom: 0;
         }
     </style>
 </head>
@@ -106,7 +127,7 @@
                         <h2 class="text-xl font-semibold text-gray-700">2. Trợ lý Chỉnh sửa AI</h2>
                         <p class="text-sm text-gray-500 mb-4">Thảo luận với AI để thực hiện các thay đổi trên dự án hiện tại.</p>
                         
-                        <div id="modificationChatHistory" class="flex-grow bg-white p-3 border rounded-md overflow-y-auto mb-4 flex flex-col gap-2 min-h-[200px]">
+                        <div id="modificationChatHistory" class="bg-white p-3 border rounded-md overflow-y-auto mb-4 flex flex-col gap-2 h-72">
                              <!-- Modification chat messages will be appended here -->
                         </div>
                         
@@ -1255,7 +1276,11 @@ Generate a JSON object with a "changes" array. Each object represents an action:
             const chatHistoryEl = document.getElementById('newProjectChatHistory');
             const messageEl = document.createElement('div');
             messageEl.className = `chat-bubble ${role === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}`;
-            messageEl.textContent = text;
+            if (role === 'ai' && typeof marked !== 'undefined') {
+                messageEl.innerHTML = marked.parse(text);
+            } else {
+                messageEl.textContent = text;
+            }
             chatHistoryEl.appendChild(messageEl);
             chatHistoryEl.scrollTop = chatHistoryEl.scrollHeight;
         }
@@ -1361,7 +1386,11 @@ Generate a JSON object with a "changes" array. Each object represents an action:
             const chatHistoryEl = document.getElementById('modificationChatHistory');
             const messageEl = document.createElement('div');
             messageEl.className = `chat-bubble ${role === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}`;
-            messageEl.textContent = text;
+            if (role === 'ai' && typeof marked !== 'undefined') {
+                messageEl.innerHTML = marked.parse(text);
+            } else {
+                messageEl.textContent = text;
+            }
             chatHistoryEl.appendChild(messageEl);
             chatHistoryEl.scrollTop = chatHistoryEl.scrollHeight;
         }
