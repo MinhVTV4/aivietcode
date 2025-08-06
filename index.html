@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototype Động - Sửa code bất kỳ với AI (v31.0 - Robust JSON & Anchor)</title>
+    <title>Prototype Động - Sửa code bất kỳ với AI (v32.0 - Flexible Regeneration)</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
@@ -116,14 +116,18 @@
                                 <input id="focus-mode-checkbox" type="checkbox" class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
                                 <label for="focus-mode-checkbox" class="ml-2 block text-sm text-gray-900">Chỉ làm việc trên vùng đã chọn (nếu có)</label>
                             </div>
-                             <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                             <div class="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
                                 <button id="modificationDiscussBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center">
                                     <span id="modificationDiscussBtnText">Thảo luận</span>
                                     <div id="modificationDiscussSpinner" class="spinner hidden ml-3"></div>
                                 </button>
                                 <button id="modificationGenerateBtn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center">
-                                    <span id="modificationGenerateBtnText">Tạo Đề xuất Sửa đổi</span>
+                                    <span id="modificationGenerateBtnText">Tạo Đề xuất</span>
                                     <div id="modificationGenerateSpinner" class="spinner hidden ml-3"></div>
+                                </button>
+                                <button id="regenerateFileBtn" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center" title="Ghi đè toàn bộ file với code mới từ AI. Hữu ích cho các thay đổi lớn trên file nhỏ.">
+                                    <span id="regenerateFileBtnText">Tái tạo File</span>
+                                    <div id="regenerateFileSpinner" class="spinner hidden ml-3"></div>
                                 </button>
                             </div>
                         </div>
@@ -1368,6 +1372,73 @@ Generate a JSON object with a "changes" array. Each object represents an action:
             }
         }
 
+        async function handleRegenerateFile() {
+            if (modificationChatHistory.length < 2) {
+                showAlert("Thiếu thông tin", "Vui lòng thảo luận với AI trước khi tái tạo file.");
+                return;
+            }
+
+            const confirmed = await showConfirm("Xác nhận Tái tạo", "Hành động này sẽ ghi đè toàn bộ nội dung của các file liên quan bằng phiên bản mới do AI tạo ra. Bạn có chắc chắn muốn tiếp tục?");
+            if (!confirmed) return;
+
+            const regenerateBtn = document.getElementById('regenerateFileBtn');
+            const spinner = document.getElementById('regenerateFileSpinner');
+            const btnText = document.getElementById('regenerateFileBtnText');
+
+            regenerateBtn.disabled = true;
+            btnText.textContent = 'Đang tái tạo...';
+            spinner.classList.remove('hidden');
+            showLoader("AI đang tái tạo lại file...");
+
+            try {
+                let projectContext = '';
+                Object.entries(projectModels).forEach(([path, model]) => {
+                    projectContext += `--- START OF ${path} ---\n${model.getValue()}\n--- END OF ${path} ---\n\n`;
+                });
+
+                const prompt = `Dựa trên toàn bộ cuộc trò chuyện và ngữ cảnh code dự án, hãy tái tạo lại nội dung hoàn chỉnh của các file bị ảnh hưởng.
+
+                PROJECT FILES:
+                ${projectContext}
+
+                OUR DISCUSSION:
+                ${modificationChatHistory.map(m => `${m.role}: ${m.text}`).join('\n')}
+
+                TASK:
+                1. Xác định các file cần thay đổi dựa trên cuộc thảo luận.
+                2. Tạo lại nội dung **hoàn chỉnh** cho các file đó.
+                3. Trả về một đối tượng JSON duy nhất, trong đó key là đường dẫn file và value là toàn bộ nội dung mới của file đó. Ví dụ: { "src/js/script.js": "...", "src/css/style.css": "..." }
+                **CRITICAL: Your entire response must be ONLY the JSON object, wrapped in \`\`\`json ... \`\`\`. No extra text outside the JSON block.**`;
+                
+                const result = await aiModel.generateContent(prompt);
+                const regeneratedFiles = parseJsonResponse(result.response.text());
+
+                let filesUpdated = 0;
+                for (const filePath in regeneratedFiles) {
+                    if (projectModels[filePath]) {
+                        projectModels[filePath].setValue(regeneratedFiles[filePath]);
+                        filesUpdated++;
+                    }
+                }
+
+                if (filesUpdated > 0) {
+                    statusEl.textContent = `Đã tái tạo và cập nhật ${filesUpdated} file.`;
+                    showAlert("Thành công!", `AI đã tái tạo và cập nhật thành công ${filesUpdated} file.`);
+                } else {
+                    showAlert("Không có thay đổi", "AI không xác định được file nào cần tái tạo.");
+                }
+
+            } catch (error) {
+                console.error("Lỗi khi tái tạo file:", error);
+                showAlert("Lỗi", `Đã xảy ra lỗi khi tái tạo file: ${error.message}`);
+            } finally {
+                regenerateBtn.disabled = false;
+                btnText.textContent = 'Tái tạo File';
+                spinner.classList.add('hidden');
+                hideLoader();
+            }
+        }
+
 
         // --- UI Helpers: Modals & Loaders ---
         const genericModal = document.getElementById('genericModal');
@@ -1491,6 +1562,7 @@ Generate a JSON object with a "changes" array. Each object represents an action:
             // Modification Chat Buttons
             document.getElementById('modificationDiscussBtn').addEventListener('click', handleModificationDiscussion);
             document.getElementById('modificationGenerateBtn').addEventListener('click', handleGenerateModification);
+            document.getElementById('regenerateFileBtn').addEventListener('click', handleRegenerateFile);
 
         }
         
