@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototype Động - Sửa code bất kỳ với AI (v28.1 - Context Fix)</title>
+    <title>Prototype Động - Sửa code bất kỳ với AI (v31.0 - Robust JSON & Anchor)</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
@@ -111,7 +111,7 @@
                         </div>
                         
                         <div class="mt-auto">
-                             <textarea id="modificationChatInput" rows="2" class="w-full p-2 border rounded-md" placeholder="Ví dụ: 'Thay đổi màu nền của body thành màu xám nhạt'"></textarea>
+                             <textarea id="modificationChatInput" rows="2" class="w-full p-2 border rounded-md" placeholder="Ví dụ: 'Thêm một hàm mới để tính tổng hai số'"></textarea>
                              <div class="mt-2 flex items-center">
                                 <input id="focus-mode-checkbox" type="checkbox" class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
                                 <label for="focus-mode-checkbox" class="ml-2 block text-sm text-gray-900">Chỉ làm việc trên vùng đã chọn (nếu có)</label>
@@ -860,6 +860,76 @@
         }
 
         // --- AI Interaction Logic (Editing) ---
+
+        // NEW: Smart "Code Fingerprint" matching function
+        function findCodeBlockRange(model, codeToFind) {
+            const codeToFindFingerprint = codeToFind.replace(/\s/g, '');
+            if (codeToFindFingerprint.length === 0) return null;
+
+            const fullModelContent = model.getValue();
+            const fullModelFingerprint = fullModelContent.replace(/\s/g, '');
+
+            const startIndexInFingerprint = fullModelFingerprint.indexOf(codeToFindFingerprint);
+            if (startIndexInFingerprint === -1) return null;
+
+            let nonWhitespaceCount = 0;
+            let startOffset = -1;
+            let endOffset = -1;
+
+            for (let i = 0; i < fullModelContent.length; i++) {
+                if (!/\s/.test(fullModelContent[i])) {
+                    if (nonWhitespaceCount === startIndexInFingerprint) {
+                        startOffset = i;
+                        break;
+                    }
+                    nonWhitespaceCount++;
+                }
+            }
+
+            if (startOffset === -1) return null;
+
+            nonWhitespaceCount = 0;
+            for (let i = startOffset; i < fullModelContent.length; i++) {
+                if (!/\s/.test(fullModelContent[i])) {
+                    if (nonWhitespaceCount === codeToFindFingerprint.length - 1) {
+                        endOffset = i + 1;
+                        break;
+                    }
+                    nonWhitespaceCount++;
+                }
+            }
+
+            if (endOffset === -1) return null;
+
+            const startPosition = model.getPositionAt(startOffset);
+            const endPosition = model.getPositionAt(endOffset);
+
+            return new monaco.Range(startPosition.lineNumber, startPosition.column, endPosition.lineNumber, endPosition.column);
+        }
+
+        // NEW: Robust JSON parsing function
+        function parseJsonResponse(responseText) {
+            let jsonString = responseText.match(/```json\s*([\s\S]*?)\s*```/)?.[1].trim();
+            
+            if (!jsonString) {
+                const startIndex = responseText.indexOf('{');
+                const endIndex = responseText.lastIndexOf('}');
+                if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
+                    jsonString = responseText.substring(startIndex, endIndex + 1);
+                } else {
+                    throw new Error("Không tìm thấy khối JSON hợp lệ trong phản hồi.");
+                }
+            }
+            
+            try {
+                return JSON.parse(jsonString);
+            } catch (e) {
+                console.error("Lỗi phân tích JSON:", e, "Chuỗi JSON lỗi:", jsonString);
+                throw new Error("Phản hồi JSON không đúng định dạng.");
+            }
+        }
+
+
         async function handleGenerateModification() {
             if (modificationChatHistory.length < 2) {
                  showAlert("Thiếu thông tin", "Vui lòng thảo luận với AI trước khi tạo đề xuất.");
@@ -894,15 +964,11 @@ ${projectContext}
 OUR DISCUSSION:
 ${modificationChatHistory.map(m => `${m.role}: ${m.text}`).join('\n')}
 TASK:
-Generate a JSON object with a "changes" array containing a single modification object for the selected code.
-- "action" must be "modify".
-- "file" must be "${activeFilePath}".
-- "reasoning" must be a DETAILED explanation in VIETNAMESE.
-- "oldCode" MUST be an EXACT copy of the original code snippet. DO NOT reformat.
-- "newCode" MUST be the complete, modified version of the snippet.
-**CRITICAL JSON FORMATTING RULES:**
-- All values must be valid JSON strings.
-Wrap the final JSON in \`\`\`json ... \`\`\`.`;
+Generate a JSON object with a "changes" array. Each object represents an action: "modify", "add", or "create".
+- For MODIFICATIONS: { "action": "modify", "file": "...", "reasoning": "...", "oldCode": "...", "newCode": "..." }. "oldCode" MUST be an EXACT copy.
+- For ADDING NEW CODE: { "action": "add", "file": "...", "reasoning": "...", "newCode": "...", "anchorCode": "a unique, multi-line (2-3 lines) block of existing code", "position": "after" | "before" }.
+- For NEW FILES: { "action": "create", "file": "...", "reasoning": "...", "newCode": "..." }
+**CRITICAL: Your entire response must be ONLY the JSON object, wrapped in \`\`\`json ... \`\`\`. No extra text outside the JSON block.**`;
                 } else {
                     Object.entries(projectModels).forEach(([path, model]) => {
                         projectContext += `--- START OF ${path} ---\n${model.getValue()}\n--- END OF ${path} ---\n\n`;
@@ -913,19 +979,16 @@ ${projectContext}
 OUR DISCUSSION:
 ${modificationChatHistory.map(m => `${m.role}: ${m.text}`).join('\n')}
 TASK:
-Generate a JSON object with a "changes" array. Each object represents an action:
-- For MODIFICATIONS: { "action": "modify", "file": "path/to/file.ext", "description": "...", "reasoning": "...", "oldCode": "...", "newCode": "..." }. The "oldCode" MUST be an EXACT copy. DO NOT reformat.
-- For NEW FILES: { "action": "create", "file": "path/to/new_file.ext", "description": "...", "reasoning": "...", "newCode": "..." }
-**CRITICAL JSON FORMATTING RULES:**
-- All values must be valid JSON strings.
-Wrap the final JSON in \`\`\`json ... \`\`\`.`;
+Generate a JSON object with a "changes" array. Each object represents an action: "modify", "add", or "create".
+- For MODIFICATIONS: { "action": "modify", "file": "...", "description": "...", "reasoning": "...", "oldCode": "...", "newCode": "..." }. "oldCode" MUST be an EXACT copy.
+- For ADDING NEW CODE: { "action": "add", "file": "...", "description": "...", "reasoning": "...", "newCode": "...", "anchorCode": "a unique, multi-line (2-3 lines) block of existing code", "position": "after" | "before" }.
+- For NEW FILES: { "action": "create", "file": "...", "description": "...", "reasoning": "...", "newCode": "..." }
+**CRITICAL: Your entire response must be ONLY the JSON object, wrapped in \`\`\`json ... \`\`\`. No extra text outside the JSON block.**`;
                 }
 
                 const result = await aiModel.generateContent(finalPrompt);
-                const jsonString = result.response.text().match(/```json\s*([\s\S]*?)\s*```/)?.[1].trim();
-                if (!jsonString) throw new Error("Phản hồi của AI không hợp lệ.");
-
-                const aiResponse = JSON.parse(jsonString);
+                const aiResponse = parseJsonResponse(result.response.text());
+                
                 if (!aiResponse.changes || !Array.isArray(aiResponse.changes)) throw new Error("Phản hồi JSON không đúng định dạng.");
                 
                 renderChangeList(aiResponse.changes);
@@ -967,6 +1030,12 @@ Wrap the final JSON in \`\`\`json ... \`\`\`.`;
                     card.innerHTML = `<p class="font-semibold text-gray-800">${change.description || 'Tạo tệp mới'}</p>
                                       <p class="text-sm text-gray-500 mt-2">Tạo tệp mới: <code class="font-mono bg-gray-200 p-1 rounded">${change.file}</code></p>
                                       <div class="mt-2 w-full h-64 border border-gray-300 rounded-md" id="editor-container-${change.uniqueId}"></div>`;
+                } else if (change.action === 'add') {
+                     card.innerHTML = `<p class="font-semibold text-gray-800">${change.description || 'Thêm code mới'}</p>
+                                      <p class="text-sm text-gray-500 mt-2">Trong tệp: <code class="font-mono bg-gray-200 p-1 rounded">${change.file}</code></p>
+                                      <p class="text-sm text-gray-500 mt-1">Sẽ được thêm vào ${change.position === 'after' ? 'sau' : 'trước'} khối code:</p>
+                                      <pre class="text-xs bg-gray-100 p-2 rounded mt-1"><code>${change.anchorCode}</code></pre>
+                                      <div class="mt-2 w-full h-64 border border-gray-300 rounded-md" id="editor-container-${change.uniqueId}"></div>`;
                 } else { // modify
                     card.innerHTML = `<p class="font-semibold text-gray-800">${change.description || 'Sửa đổi code'}</p>
                                       <p class="text-sm text-gray-500 mt-2">Trong tệp: <code class="font-mono bg-gray-200 p-1 rounded">${change.file}</code></p>
@@ -1004,7 +1073,7 @@ Wrap the final JSON in \`\`\`json ... \`\`\`.`;
                 aiResponseContainer.appendChild(card);
 
                 // Initialize editor after the card is in the DOM
-                if (change.action === 'create') {
+                if (change.action === 'create' || change.action === 'add') {
                     const editorContainer = document.getElementById(`editor-container-${change.uniqueId}`);
                     const viewOnlyEditor = monaco.editor.create(editorContainer, {
                         value: change.newCode,
@@ -1041,6 +1110,13 @@ Wrap the final JSON in \`\`\`json ... \`\`\`.`;
 
         async function applySingleChange(change) {
             const card = document.getElementById(change.uniqueId);
+            const targetModel = projectModels[change.file];
+
+            if (!targetModel) {
+                await showAlert("Lỗi", `Không tìm thấy tệp ${change.file}`);
+                return;
+            }
+
             if (change.action === 'create') {
                 const parts = change.file.split('/');
                 const filename = parts.pop();
@@ -1061,25 +1137,28 @@ Wrap the final JSON in \`\`\`json ... \`\`\`.`;
                     await showAlert("Lỗi", `Không thể tạo tệp, thư mục cha "${parentPath}" không tồn tại.`);
                     return;
                 }
-            } else { // modify
-                const targetModel = projectModels[change.file];
-                if (!targetModel) {
-                    await showAlert("Lỗi", `Không tìm thấy tệp ${change.file}`);
+            } else if (change.action === 'add') {
+                const matchRange = findCodeBlockRange(targetModel, change.anchorCode);
+                if (matchRange) {
+                    let range;
+                    let textToInsert;
+                    if (change.position === 'after') {
+                        range = new monaco.Range(matchRange.endLineNumber, targetModel.getLineMaxColumn(matchRange.endLineNumber), matchRange.endLineNumber, targetModel.getLineMaxColumn(matchRange.endLineNumber));
+                        textToInsert = '\n' + change.newCode;
+                    } else { // before
+                        range = new monaco.Range(matchRange.startLineNumber, 1, matchRange.startLineNumber, 1);
+                        textToInsert = change.newCode + '\n';
+                    }
+                    let inverseEdits = [];
+                    targetModel.pushEditOperations([], [{ range: range, text: textToInsert }], (inverse) => { inverseEdits = inverse; return null; });
+                    undoStacks[change.uniqueId] = { action: 'add', path: change.file, edits: inverseEdits };
+                    statusEl.textContent = `Đã thêm code vào ${change.file}`;
+                } else {
+                    await showAlert("Lỗi", `Không tìm thấy khối code neo trong tệp ${change.file}.`);
                     return;
                 }
-
-                const isFocusMode = focusModeCheckbox.checked;
-                const selection = monacoEditor.getSelection();
-                
-                let matchRange;
-                if (isFocusMode && !selection.isEmpty() && change.file === activeFilePath) {
-                    matchRange = selection;
-                } else {
-                    const match = targetModel.findMatches(change.oldCode, false, false, true, null, true)[0];
-                    if (match) {
-                        matchRange = match.range;
-                    }
-                }
+            } else { // modify
+                const matchRange = findCodeBlockRange(targetModel, change.oldCode);
 
                 if (matchRange) {
                     let inverseEdits = [];
@@ -1104,7 +1183,7 @@ Wrap the final JSON in \`\`\`json ... \`\`\`.`;
             if (undoInfo.action === 'create') {
                 window.handleDelete(undoInfo.path, true); // Pass true to skip confirm
                 statusEl.textContent = `Đã hoàn tác (xóa) tệp ${undoInfo.path}`;
-            } else { // modify
+            } else { // modify or add
                 const targetModel = projectModels[undoInfo.path];
                 if (targetModel && undoInfo.edits) {
                     targetModel.pushEditOperations([], undoInfo.edits, () => null);
@@ -1204,19 +1283,13 @@ Wrap the final JSON in \`\`\`json ... \`\`\`.`;
                 **QUAN TRỌNG:** Chỉ trả về đối tượng JSON, không có bất kỳ văn bản hay giải thích nào khác.`;
 
                 const result = await aiModel.generateContent(prompt);
-                const jsonString = result.response.text().match(/```json\s*([\s\S]*?)\s*```/)?.[1].trim();
+                const aiResponse = parseJsonResponse(result.response.text());
                 
-                if (!jsonString) {
-                    throw new Error("AI đã không trả về định dạng JSON hợp lệ.");
-                }
-
-                const filesData = JSON.parse(jsonString);
-                
-                if (!filesData['index.html'] || !filesData['src/css/style.css'] || !filesData['src/js/script.js']) {
+                if (!aiResponse['index.html'] || !aiResponse['src/css/style.css'] || !aiResponse['src/js/script.js']) {
                     throw new Error("Đối tượng JSON trả về thiếu các tệp cần thiết.");
                 }
 
-                loadProjectFromData(filesData);
+                loadProjectFromData(aiResponse);
                 newProjectChatModal.classList.add('hidden');
                 statusEl.textContent = "Dự án mới đã được tạo thành công bởi AI!";
                 showAlert("Thành công!", "Dự án mới của bạn đã được tạo và nạp vào trình soạn thảo.");
