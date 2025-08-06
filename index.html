@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototype Động - Sửa code bất kỳ với AI (v34.1 - Stability Fix)</title>
+    <title>Prototype Động - Sửa code bất kỳ với AI (v35.0 - File Attachment)</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -134,7 +134,25 @@
                         
                         <div class="mt-auto">
                              <textarea id="modificationChatInput" rows="2" class="w-full p-2 border rounded-md" placeholder="Ví dụ: 'Thêm một hàm mới để tính tổng hai số'"></textarea>
-                             <div class="mt-2 flex items-center">
+                            
+                             <!-- File Attachment Section -->
+                            <div class="mt-4">
+                                <label for="file-attachment-input" class="block text-sm font-medium text-gray-700 mb-1">Đính kèm tệp (để cung cấp thêm ngữ cảnh cho AI)</label>
+                                <div class="flex items-center">
+                                    <label class="w-full flex items-center px-4 py-2 bg-white text-indigo-600 rounded-lg shadow-sm tracking-wide uppercase border border-indigo-500 cursor-pointer hover:bg-indigo-600 hover:text-white">
+                                        <svg class="w-6 h-6 mr-3" fill="currentColor" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                                            <path d="M16.88 9.1A4 4 0 0 1 16 17H5a5 5 0 0 1-1-9.9V7a3 3 0 0 1 4.52-2.59A4.98 4.98 0 0 1 17 8c0 .38-.04.74-.12 1.1zM11 11h3l-4 4-4-4h3v-4h2v4z" />
+                                        </svg>
+                                        <span class="text-sm font-semibold">Chọn tệp...</span>
+                                        <input type='file' id="file-attachment-input" class="hidden" multiple />
+                                    </label>
+                                </div>
+                                <div id="attached-files-list" class="mt-2 flex flex-wrap gap-2">
+                                    <!-- Attached files will be listed here -->
+                                </div>
+                            </div>
+                             
+                             <div class="mt-4 flex items-center">
                                 <input id="focus-mode-checkbox" type="checkbox" class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
                                 <label for="focus-mode-checkbox" class="ml-2 block text-sm text-gray-900">Chỉ làm việc trên vùng đã chọn (nếu có)</label>
                             </div>
@@ -283,7 +301,8 @@
         let currentProjectName = null;
         let activeDiffEditors = [];
         let newProjectChatHistory = [];
-        let modificationChatHistory = []; // For the modification chat
+        let modificationChatHistory = [];
+        let attachedFiles = []; // For file attachments
 
         // --- DOM Elements ---
         const authScreen = document.getElementById('auth-screen');
@@ -301,6 +320,8 @@
         const mobileViewBtn = document.getElementById('mobileViewBtn');
         const focusModeCheckbox = document.getElementById('focus-mode-checkbox');
         const newProjectChatModal = document.getElementById('newProjectChatModal');
+        const fileAttachmentInput = document.getElementById('file-attachment-input');
+        const attachedFilesList = document.getElementById('attached-files-list');
 
         // --- Firebase Initialization ---
         const app = initializeApp(firebaseConfig);
@@ -885,14 +906,69 @@
             }
         }
 
-        // --- AI Interaction Logic (Editing) ---
+        // --- File Attachment Logic ---
+        function renderAttachedFiles() {
+            attachedFilesList.innerHTML = '';
+            attachedFiles.forEach(file => {
+                const fileTag = document.createElement('div');
+                fileTag.className = 'flex items-center bg-indigo-100 text-indigo-800 text-sm font-medium px-2.5 py-1 rounded-full';
+                fileTag.innerHTML = `
+                    <span>${file.name}</span>
+                    <button data-filename="${file.name}" class="remove-attachment-btn ml-2 text-indigo-500 hover:text-indigo-700 font-bold">&times;</button>
+                `;
+                attachedFilesList.appendChild(fileTag);
+            });
 
-        // NEW: Smart "Code Fingerprint" matching function
+            document.querySelectorAll('.remove-attachment-btn').forEach(btn => {
+                btn.onclick = (e) => {
+                    const filename = e.currentTarget.dataset.filename;
+                    removeAttachedFile(filename);
+                };
+            });
+        }
+
+        function removeAttachedFile(filename) {
+            attachedFiles = attachedFiles.filter(f => f.name !== filename);
+            renderAttachedFiles();
+        }
+
+        function handleFileSelect(event) {
+            const files = event.target.files;
+            if (!files) return;
+
+            Array.from(files).forEach(file => {
+                if (attachedFiles.some(f => f.name === file.name)) {
+                    showAlert("Tệp bị trùng", `Tệp có tên "${file.name}" đã được đính kèm.`);
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    attachedFiles.push({ name: file.name, content: e.target.result });
+                    renderAttachedFiles();
+                };
+                reader.onerror = () => {
+                    showAlert("Lỗi đọc tệp", `Không thể đọc nội dung của tệp "${file.name}".`);
+                };
+                reader.readAsText(file);
+            });
+            event.target.value = '';
+        }
+
+        function getAttachedFilesContext() {
+            if (attachedFiles.length === 0) return '';
+            let context = '\n\n--- START OF ATTACHED FILES CONTEXT ---\n';
+            attachedFiles.forEach(file => {
+                context += `--- Attached File: ${file.name} ---\n${file.content}\n\n`;
+            });
+            context += '--- END OF ATTACHED FILES CONTEXT ---\n';
+            return context;
+        }
+
+
+        // --- AI Interaction Logic (Editing) ---
         function findCodeBlockRange(model, codeToFind) {
-            // Step 1: Create a robust fingerprint by normalizing line endings and removing ALL whitespace and zero-width chars.
             const createFingerprint = (str) => {
                 if (!str) return '';
-                // Normalize CRLF to LF, then remove all whitespace characters and zero-width spaces.
                 return str.replace(/\r\n/g, '\n').replace(/[\s\u200B-\u200D\uFEFF]/g, '');
             };
             
@@ -902,24 +978,18 @@
             const fullModelContent = model.getValue();
             const fullModelFingerprint = createFingerprint(fullModelContent);
 
-            // Step 2: Find the start index of the fingerprint.
             const startIndexInFingerprint = fullModelFingerprint.indexOf(codeToFindFingerprint);
             if (startIndexInFingerprint === -1) {
-                // For debugging:
                 console.error("Fingerprint mismatch!");
-                console.log("Expected fingerprint:", codeToFindFingerprint);
-                console.log("Actual fingerprint:", fullModelFingerprint);
                 return null;
             }
 
-            // Step 3: Map the fingerprint index back to the offset in the original model content.
             let nonWhitespaceCount = 0;
             let startOffset = -1;
             let endOffset = -1;
 
             for (let i = 0; i < fullModelContent.length; i++) {
                 const char = fullModelContent[i];
-                // Check against the same characters removed by the fingerprint function.
                 if (!/[\s\u200B-\u200D\uFEFF]/.test(char)) {
                     if (nonWhitespaceCount === startIndexInFingerprint) {
                         startOffset = i;
@@ -934,14 +1004,12 @@
 
             if (startOffset === -1 || endOffset === -1) return null;
 
-            // Step 4: Convert offsets to positions in the original model.
             const startPosition = model.getPositionAt(startOffset);
             const endPosition = model.getPositionAt(endOffset);
 
             return new monaco.Range(startPosition.lineNumber, startPosition.column, endPosition.lineNumber, endPosition.column);
         }
 
-        // NEW: Robust JSON parsing function
         function parseJsonResponse(responseText) {
             let jsonString = responseText.match(/```json\s*([\s\S]*?)\s*```/)?.[1].trim();
             
@@ -956,7 +1024,6 @@
             }
             
             try {
-                // Before parsing, try to clean common JSON errors like trailing commas.
                 const cleanedJsonString = jsonString.replace(/,\s*([}\]])/g, '$1');
                 return JSON.parse(cleanedJsonString);
             } catch (e) {
@@ -991,12 +1058,14 @@
                 const isFocusMode = focusModeCheckbox.checked;
                 const selection = monacoEditor.getSelection();
                 const selectedText = monacoEditor.getModel().getValueInRange(selection);
+                const attachedFilesContext = getAttachedFilesContext();
 
                 if (isFocusMode && !selection.isEmpty()) {
                     projectContext = `The user has selected the following code snippet from the file \`${activeFilePath}\`:\n\`\`\`\n${selectedText}\n\`\`\``;
                     finalPrompt = `You are an expert code modification assistant. Based on our discussion, your task is to modify the provided code snippet.
 CODE SNIPPET TO MODIFY:
 ${projectContext}
+${attachedFilesContext}
 OUR DISCUSSION:
 ${modificationChatHistory.map(m => `${m.role}: ${m.text}`).join('\n')}
 TASK:
@@ -1013,6 +1082,7 @@ Generate a JSON object with a "changes" array. Each object represents an action:
                     finalPrompt = `You are an expert code modification assistant. Based on our discussion and the full project files, generate modification suggestions.
 PROJECT FILES:
 ${projectContext}
+${attachedFilesContext}
 OUR DISCUSSION:
 ${modificationChatHistory.map(m => `${m.role}: ${m.text}`).join('\n')}
 TASK:
@@ -1043,7 +1113,6 @@ Generate a JSON object with a "changes" array. Each object represents an action:
         }
 
         function renderChangeList(changes) {
-            // Dispose any existing diff editors to prevent memory leaks
             activeDiffEditors.forEach(d => {
                 d.editor.dispose();
                 d.originalModel.dispose();
@@ -1085,7 +1154,6 @@ Generate a JSON object with a "changes" array. Each object represents an action:
                                       <div id="diff-container-${change.uniqueId}" class="mt-2 w-full h-64 border border-gray-300 rounded-md"></div>`;
                 }
                 
-                // --- Action Buttons ---
                 const buttonContainer = document.createElement('div');
                 buttonContainer.className = 'mt-4 flex flex-col sm:flex-row gap-2';
 
@@ -1115,49 +1183,18 @@ Generate a JSON object with a "changes" array. Each object represents an action:
                 card.appendChild(undoButtonContainer);
                 aiResponseContainer.appendChild(card);
 
-                // Initialize editor after the card is in the DOM
                 if (change.action === 'create' || change.action === 'add') {
-                    const editorContainer = document.getElementById(`editor-container-${change.uniqueId}`);
-                    const viewOnlyEditor = monaco.editor.create(editorContainer, {
-                        value: change.newCode,
-                        language: getLanguageForFile(change.file),
-                        readOnly: true,
-                        automaticLayout: true,
-                        theme: 'vs-light'
-                    });
+                    monaco.editor.create(document.getElementById(`editor-container-${change.uniqueId}`), { value: change.newCode, language: getLanguageForFile(change.file), readOnly: true, automaticLayout: true, theme: 'vs-light' });
                 } else if (change.action === 'remove') {
-                    const editorContainer = document.getElementById(`editor-container-${change.uniqueId}`);
-                    const viewOnlyEditor = monaco.editor.create(editorContainer, {
-                        value: change.codeToRemove,
-                        language: getLanguageForFile(change.file),
-                        readOnly: true,
-                        automaticLayout: true,
-                        theme: 'vs-light',
-                        extraEditorClassName: 'bg-red-50'
-                    });
+                    monaco.editor.create(document.getElementById(`editor-container-${change.uniqueId}`), { value: change.codeToRemove, language: getLanguageForFile(change.file), readOnly: true, automaticLayout: true, theme: 'vs-light', extraEditorClassName: 'bg-red-50' });
                 }
                 else { // modify
                     const diffContainer = document.getElementById(`diff-container-${change.uniqueId}`);
                     const originalModel = monaco.editor.createModel(change.oldCode, getLanguageForFile(change.file));
                     const modifiedModel = monaco.editor.createModel(change.newCode, getLanguageForFile(change.file));
-
-                    const diffEditor = monaco.editor.createDiffEditor(diffContainer, {
-                        enableSplitViewResizing: true,
-                        readOnly: true,
-                        automaticLayout: true,
-                        theme: 'vs-light'
-                    });
-
-                    diffEditor.setModel({
-                        original: originalModel,
-                        modified: modifiedModel
-                    });
-
-                    activeDiffEditors.push({
-                        editor: diffEditor,
-                        originalModel: originalModel,
-                        modifiedModel: modifiedModel
-                    });
+                    const diffEditor = monaco.editor.createDiffEditor(diffContainer, { readOnly: true, automaticLayout: true, theme: 'vs-light' });
+                    diffEditor.setModel({ original: originalModel, modified: modifiedModel });
+                    activeDiffEditors.push({ editor: diffEditor, originalModel: originalModel, modifiedModel: modifiedModel });
                 }
             });
         }
@@ -1166,7 +1203,7 @@ Generate a JSON object with a "changes" array. Each object represents an action:
             const card = document.getElementById(change.uniqueId);
             const targetModel = projectModels[change.file];
 
-            if (!targetModel) {
+            if (!targetModel && change.action !== 'create') {
                 await showAlert("Lỗi", `Không tìm thấy tệp ${change.file}`);
                 return;
             }
@@ -1181,9 +1218,7 @@ Generate a JSON object with a "changes" array. Each object represents an action:
                     targetChildren[filename] = { type: 'file' };
                     projectModels[change.file] = monaco.editor.createModel(change.newCode, getLanguageForFile(change.file));
                     projectModels[change.file].onDidChangeContent(updatePreview);
-                    
                     undoStacks[change.uniqueId] = { action: 'create', path: change.file };
-
                     renderFileExplorer();
                     switchFile(change.file);
                     statusEl.textContent = `Đã tạo tệp ${change.file}`;
@@ -1194,12 +1229,11 @@ Generate a JSON object with a "changes" array. Each object represents an action:
             } else if (change.action === 'add') {
                 const matchRange = findCodeBlockRange(targetModel, change.anchorCode);
                 if (matchRange) {
-                    let range;
-                    let textToInsert;
+                    let range, textToInsert;
                     if (change.position === 'after') {
                         range = new monaco.Range(matchRange.endLineNumber, targetModel.getLineMaxColumn(matchRange.endLineNumber), matchRange.endLineNumber, targetModel.getLineMaxColumn(matchRange.endLineNumber));
                         textToInsert = '\n' + change.newCode;
-                    } else { // before
+                    } else {
                         range = new monaco.Range(matchRange.startLineNumber, 1, matchRange.startLineNumber, 1);
                         textToInsert = change.newCode + '\n';
                     }
@@ -1224,13 +1258,10 @@ Generate a JSON object with a "changes" array. Each object represents an action:
                 }
             } else { // modify
                 const matchRange = findCodeBlockRange(targetModel, change.oldCode);
-
                 if (matchRange) {
                     let inverseEdits = [];
                     targetModel.pushEditOperations([], [{ range: matchRange, text: change.newCode }], (inverse) => { inverseEdits = inverse; return null; });
-                    
                     undoStacks[change.uniqueId] = { action: 'modify', path: change.file, edits: inverseEdits };
-
                     statusEl.textContent = `Đã cập nhật tệp ${change.file}`;
                 } else {
                     await showAlert("Lỗi", `Không tìm thấy mã cũ trong tệp ${change.file}. Vui lòng thử áp dụng thủ công.`);
@@ -1246,9 +1277,9 @@ Generate a JSON object with a "changes" array. Each object represents an action:
             if (!undoInfo) return;
             
             if (undoInfo.action === 'create') {
-                window.handleDelete(undoInfo.path, true); // Pass true to skip confirm
+                window.handleDelete(undoInfo.path, true);
                 statusEl.textContent = `Đã hoàn tác (xóa) tệp ${undoInfo.path}`;
-            } else { // modify, add, or remove
+            } else {
                 const targetModel = projectModels[undoInfo.path];
                 if (targetModel && undoInfo.edits) {
                     targetModel.pushEditOperations([], undoInfo.edits, () => null);
@@ -1377,6 +1408,8 @@ Generate a JSON object with a "changes" array. Each object represents an action:
         // --- Modification Chat Logic ---
         function resetModificationChat() {
             modificationChatHistory = [];
+            attachedFiles = [];
+            renderAttachedFiles();
             const chatHistoryEl = document.getElementById('modificationChatHistory');
             chatHistoryEl.innerHTML = '';
             addMessageToModificationChat('ai', 'Chào bạn! Tôi có thể giúp gì để sửa đổi dự án này?');
@@ -1417,11 +1450,14 @@ Generate a JSON object with a "changes" array. Each object represents an action:
                 Object.entries(projectModels).forEach(([path, model]) => {
                     projectContext += `--- START OF ${path} ---\n${model.getValue()}\n--- END OF ${path} ---\n\n`;
                 });
+                
+                const attachedFilesContext = getAttachedFilesContext();
 
                 const prompt = `Bạn là một trợ lý lập trình. Chúng ta đang thảo luận về việc sửa đổi một dự án web. Dưới đây là ngữ cảnh code và cuộc trò chuyện của chúng ta. Hãy tiếp tục thảo luận, đặt câu hỏi để làm rõ yêu cầu, hoặc đưa ra gợi ý. **KHÔNG** tạo ra đề xuất sửa đổi JSON trong bước này.
                 
                 NGỮ CẢNH CODE DỰ ÁN:
                 ${projectContext}
+                ${attachedFilesContext}
 
                 LỊCH SỬ TRÒ CHUYỆN:
                 ${modificationChatHistory.map(m => `${m.role}: ${m.text}`).join('\n')}
@@ -1464,11 +1500,14 @@ Generate a JSON object with a "changes" array. Each object represents an action:
                 Object.entries(projectModels).forEach(([path, model]) => {
                     projectContext += `--- START OF ${path} ---\n${model.getValue()}\n--- END OF ${path} ---\n\n`;
                 });
+                
+                const attachedFilesContext = getAttachedFilesContext();
 
                 const prompt = `Dựa trên toàn bộ cuộc trò chuyện và ngữ cảnh code dự án, hãy tái tạo lại nội dung hoàn chỉnh của các file bị ảnh hưởng.
 
                 PROJECT FILES:
                 ${projectContext}
+                ${attachedFilesContext}
 
                 OUR DISCUSSION:
                 ${modificationChatHistory.map(m => `${m.role}: ${m.text}`).join('\n')}
@@ -1632,6 +1671,9 @@ Generate a JSON object with a "changes" array. Each object represents an action:
             document.getElementById('modificationDiscussBtn').addEventListener('click', handleModificationDiscussion);
             document.getElementById('modificationGenerateBtn').addEventListener('click', handleGenerateModification);
             document.getElementById('regenerateFileBtn').addEventListener('click', handleRegenerateFile);
+            
+            // File Attachment Listener
+            fileAttachmentInput.addEventListener('change', handleFileSelect);
 
         }
         
