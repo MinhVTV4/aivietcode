@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototype Động - Sửa code bất kỳ với AI (v32.0 - Flexible Regeneration)</title>
+    <title>Prototype Động - Sửa code bất kỳ với AI (v31.1 - Line Ending Fix)</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
@@ -867,44 +867,52 @@
 
         // NEW: Smart "Code Fingerprint" matching function
         function findCodeBlockRange(model, codeToFind) {
-            const codeToFindFingerprint = codeToFind.replace(/\s/g, '');
+            // Step 1: Create a robust fingerprint by normalizing line endings and removing ALL whitespace and zero-width chars.
+            const createFingerprint = (str) => {
+                if (!str) return '';
+                // Normalize CRLF to LF, then remove all whitespace characters and zero-width spaces.
+                return str.replace(/\r\n/g, '\n').replace(/[\s\u200B-\u200D\uFEFF]/g, '');
+            };
+            
+            const codeToFindFingerprint = createFingerprint(codeToFind);
             if (codeToFindFingerprint.length === 0) return null;
 
             const fullModelContent = model.getValue();
-            const fullModelFingerprint = fullModelContent.replace(/\s/g, '');
+            const fullModelFingerprint = createFingerprint(fullModelContent);
 
+            // Step 2: Find the start index of the fingerprint.
             const startIndexInFingerprint = fullModelFingerprint.indexOf(codeToFindFingerprint);
-            if (startIndexInFingerprint === -1) return null;
+            if (startIndexInFingerprint === -1) {
+                // For debugging:
+                console.error("Fingerprint mismatch!");
+                console.log("Expected fingerprint:", codeToFindFingerprint);
+                console.log("Actual fingerprint:", fullModelFingerprint);
+                return null;
+            }
 
+            // Step 3: Map the fingerprint index back to the offset in the original model content.
             let nonWhitespaceCount = 0;
             let startOffset = -1;
             let endOffset = -1;
 
             for (let i = 0; i < fullModelContent.length; i++) {
-                if (!/\s/.test(fullModelContent[i])) {
+                const char = fullModelContent[i];
+                // Check against the same characters removed by the fingerprint function.
+                if (!/[\s\u200B-\u200D\uFEFF]/.test(char)) {
                     if (nonWhitespaceCount === startIndexInFingerprint) {
                         startOffset = i;
-                        break;
                     }
-                    nonWhitespaceCount++;
-                }
-            }
-
-            if (startOffset === -1) return null;
-
-            nonWhitespaceCount = 0;
-            for (let i = startOffset; i < fullModelContent.length; i++) {
-                if (!/\s/.test(fullModelContent[i])) {
-                    if (nonWhitespaceCount === codeToFindFingerprint.length - 1) {
+                    if (nonWhitespaceCount === startIndexInFingerprint + codeToFindFingerprint.length - 1) {
                         endOffset = i + 1;
-                        break;
+                        break; 
                     }
                     nonWhitespaceCount++;
                 }
             }
 
-            if (endOffset === -1) return null;
+            if (startOffset === -1 || endOffset === -1) return null;
 
+            // Step 4: Convert offsets to positions in the original model.
             const startPosition = model.getPositionAt(startOffset);
             const endPosition = model.getPositionAt(endOffset);
 
@@ -921,15 +929,17 @@
                 if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
                     jsonString = responseText.substring(startIndex, endIndex + 1);
                 } else {
-                    throw new Error("Không tìm thấy khối JSON hợp lệ trong phản hồi.");
+                    throw new Error("Không tìm thấy khối JSON hợp lệ trong phản hồi của AI.");
                 }
             }
             
             try {
-                return JSON.parse(jsonString);
+                // Before parsing, try to clean common JSON errors like trailing commas.
+                const cleanedJsonString = jsonString.replace(/,\s*([}\]])/g, '$1');
+                return JSON.parse(cleanedJsonString);
             } catch (e) {
                 console.error("Lỗi phân tích JSON:", e, "Chuỗi JSON lỗi:", jsonString);
-                throw new Error("Phản hồi JSON không đúng định dạng.");
+                throw new Error("Phản hồi JSON không đúng định dạng, ngay cả sau khi đã cố gắng sửa lỗi.");
             }
         }
 
@@ -968,11 +978,12 @@ ${projectContext}
 OUR DISCUSSION:
 ${modificationChatHistory.map(m => `${m.role}: ${m.text}`).join('\n')}
 TASK:
-Generate a JSON object with a "changes" array. Each object represents an action: "modify", "add", or "create".
+Generate a JSON object with a "changes" array. Each object represents an action: "modify", "add", "remove", or "create".
 - For MODIFICATIONS: { "action": "modify", "file": "...", "reasoning": "...", "oldCode": "...", "newCode": "..." }. "oldCode" MUST be an EXACT copy.
 - For ADDING NEW CODE: { "action": "add", "file": "...", "reasoning": "...", "newCode": "...", "anchorCode": "a unique, multi-line (2-3 lines) block of existing code", "position": "after" | "before" }.
+- For REMOVING CODE: { "action": "remove", "file": "...", "reasoning": "...", "codeToRemove": "the exact code block to be deleted" }.
 - For NEW FILES: { "action": "create", "file": "...", "reasoning": "...", "newCode": "..." }
-**CRITICAL: Your entire response must be ONLY the JSON object, wrapped in \`\`\`json ... \`\`\`. No extra text outside the JSON block.**`;
+**ULTRA-CRITICAL WARNING: Your entire response must be ONLY the JSON object, wrapped in \`\`\`json ... \`\`\`. Any extra text, comments, or conversational pleasantries before or after the JSON block will cause a system failure. Adhere to this format strictly.**`;
                 } else {
                     Object.entries(projectModels).forEach(([path, model]) => {
                         projectContext += `--- START OF ${path} ---\n${model.getValue()}\n--- END OF ${path} ---\n\n`;
@@ -983,11 +994,12 @@ ${projectContext}
 OUR DISCUSSION:
 ${modificationChatHistory.map(m => `${m.role}: ${m.text}`).join('\n')}
 TASK:
-Generate a JSON object with a "changes" array. Each object represents an action: "modify", "add", or "create".
+Generate a JSON object with a "changes" array. Each object represents an action: "modify", "add", "remove", or "create".
 - For MODIFICATIONS: { "action": "modify", "file": "...", "description": "...", "reasoning": "...", "oldCode": "...", "newCode": "..." }. "oldCode" MUST be an EXACT copy.
 - For ADDING NEW CODE: { "action": "add", "file": "...", "description": "...", "reasoning": "...", "newCode": "...", "anchorCode": "a unique, multi-line (2-3 lines) block of existing code", "position": "after" | "before" }.
+- For REMOVING CODE: { "action": "remove", "file": "...", "description": "...", "reasoning": "...", "codeToRemove": "the exact code block to be deleted" }.
 - For NEW FILES: { "action": "create", "file": "...", "description": "...", "reasoning": "...", "newCode": "..." }
-**CRITICAL: Your entire response must be ONLY the JSON object, wrapped in \`\`\`json ... \`\`\`. No extra text outside the JSON block.**`;
+**ULTRA-CRITICAL WARNING: Your entire response must be ONLY the JSON object, wrapped in \`\`\`json ... \`\`\`. Any extra text, comments, or conversational pleasantries before or after the JSON block will cause a system failure. Adhere to this format strictly.**`;
                 }
 
                 const result = await aiModel.generateContent(finalPrompt);
@@ -1040,6 +1052,11 @@ Generate a JSON object with a "changes" array. Each object represents an action:
                                       <p class="text-sm text-gray-500 mt-1">Sẽ được thêm vào ${change.position === 'after' ? 'sau' : 'trước'} khối code:</p>
                                       <pre class="text-xs bg-gray-100 p-2 rounded mt-1"><code>${change.anchorCode}</code></pre>
                                       <div class="mt-2 w-full h-64 border border-gray-300 rounded-md" id="editor-container-${change.uniqueId}"></div>`;
+                } else if (change.action === 'remove') {
+                     card.innerHTML = `<p class="font-semibold text-gray-800">${change.description || 'Xóa code'}</p>
+                                      <p class="text-sm text-gray-500 mt-2">Trong tệp: <code class="font-mono bg-gray-200 p-1 rounded">${change.file}</code></p>
+                                      <p class="text-sm text-gray-500 mt-1">Khối code sau sẽ bị xóa:</p>
+                                      <div class="mt-2 w-full h-64 border border-red-300 rounded-md" id="editor-container-${change.uniqueId}"></div>`;
                 } else { // modify
                     card.innerHTML = `<p class="font-semibold text-gray-800">${change.description || 'Sửa đổi code'}</p>
                                       <p class="text-sm text-gray-500 mt-2">Trong tệp: <code class="font-mono bg-gray-200 p-1 rounded">${change.file}</code></p>
@@ -1086,7 +1103,18 @@ Generate a JSON object with a "changes" array. Each object represents an action:
                         automaticLayout: true,
                         theme: 'vs-light'
                     });
-                } else { // modify
+                } else if (change.action === 'remove') {
+                    const editorContainer = document.getElementById(`editor-container-${change.uniqueId}`);
+                    const viewOnlyEditor = monaco.editor.create(editorContainer, {
+                        value: change.codeToRemove,
+                        language: getLanguageForFile(change.file),
+                        readOnly: true,
+                        automaticLayout: true,
+                        theme: 'vs-light',
+                        extraEditorClassName: 'bg-red-50'
+                    });
+                }
+                else { // modify
                     const diffContainer = document.getElementById(`diff-container-${change.uniqueId}`);
                     const originalModel = monaco.editor.createModel(change.oldCode, getLanguageForFile(change.file));
                     const modifiedModel = monaco.editor.createModel(change.newCode, getLanguageForFile(change.file));
@@ -1161,6 +1189,17 @@ Generate a JSON object with a "changes" array. Each object represents an action:
                     await showAlert("Lỗi", `Không tìm thấy khối code neo trong tệp ${change.file}.`);
                     return;
                 }
+            } else if (change.action === 'remove') {
+                const matchRange = findCodeBlockRange(targetModel, change.codeToRemove);
+                if (matchRange) {
+                    let inverseEdits = [];
+                    targetModel.pushEditOperations([], [{ range: matchRange, text: '' }], (inverse) => { inverseEdits = inverse; return null; });
+                    undoStacks[change.uniqueId] = { action: 'remove', path: change.file, edits: inverseEdits };
+                    statusEl.textContent = `Đã xóa code khỏi ${change.file}`;
+                } else {
+                    await showAlert("Lỗi", `Không tìm thấy khối code cần xóa trong tệp ${change.file}.`);
+                    return;
+                }
             } else { // modify
                 const matchRange = findCodeBlockRange(targetModel, change.oldCode);
 
@@ -1187,7 +1226,7 @@ Generate a JSON object with a "changes" array. Each object represents an action:
             if (undoInfo.action === 'create') {
                 window.handleDelete(undoInfo.path, true); // Pass true to skip confirm
                 statusEl.textContent = `Đã hoàn tác (xóa) tệp ${undoInfo.path}`;
-            } else { // modify or add
+            } else { // modify, add, or remove
                 const targetModel = projectModels[undoInfo.path];
                 if (targetModel && undoInfo.edits) {
                     targetModel.pushEditOperations([], undoInfo.edits, () => null);
