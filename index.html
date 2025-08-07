@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototype Động - Sửa code bất kỳ với AI (v39.1 - Plan Context Fix)</title>
+    <title>Prototype Động - Sửa code bất kỳ với AI (v40.1 - Full Code Fix)</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -24,56 +24,22 @@
         .context-menu-item { display: block; width: 100%; padding: 0.5rem 1rem; font-size: 0.875rem; text-align: left; }
         .context-menu-item:hover { background-color: #f3f4f6; }
         
-        /* Fullscreen loader styles */
         .loader-spin {
-            border: 5px solid #f3f3f3; /* Light grey */
-            border-top: 5px solid #4f46e5; /* Indigo */
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #4f46e5;
             border-radius: 50%;
             width: 50px;
             height: 50px;
             animation: spin 1s linear infinite;
         }
 
-        /* Chat bubble styles */
-        .chat-bubble {
-            max-width: 80%;
-            padding: 0.75rem 1rem;
-            border-radius: 1rem;
-            margin-bottom: 0.5rem;
-            word-wrap: break-word;
-        }
-        .chat-bubble-user {
-            background-color: #4338ca; /* Indigo-700 */
-            color: white;
-            align-self: flex-end;
-            border-bottom-right-radius: 0.25rem;
-        }
-        .chat-bubble-ai {
-            background-color: #e5e7eb; /* Gray-200 */
-            color: #1f2937; /* Gray-800 */
-            align-self: flex-start;
-            border-bottom-left-radius: 0.25rem;
-        }
-        .chat-bubble-ai pre, #aiPlanContainer pre {
-            background-color: #1f2937;
-            color: #e5e7eb;
-            padding: 0.75rem;
-            border-radius: 0.5rem;
-            overflow-x: auto;
-            margin-top: 0.5rem;
-            font-size: 0.875rem;
-        }
-        .chat-bubble-ai code, #aiPlanContainer code {
-            font-family: monospace;
-        }
-        .chat-bubble-ai ul, .chat-bubble-ai ol, #aiPlanContainer ul, #aiPlanContainer ol {
-            margin-left: 1.25rem;
-            margin-top: 0.5rem;
-            margin-bottom: 0.5rem;
-        }
-        .chat-bubble-ai p:last-child, #aiPlanContainer p:last-child {
-            margin-bottom: 0;
-        }
+        .chat-bubble { max-width: 80%; padding: 0.75rem 1rem; border-radius: 1rem; margin-bottom: 0.5rem; word-wrap: break-word; }
+        .chat-bubble-user { background-color: #4338ca; color: white; align-self: flex-end; border-bottom-right-radius: 0.25rem; }
+        .chat-bubble-ai { background-color: #e5e7eb; color: #1f2937; align-self: flex-start; border-bottom-left-radius: 0.25rem; }
+        .chat-bubble-ai pre, #aiPlanContainer pre { background-color: #1f2937; color: #e5e7eb; padding: 0.75rem; border-radius: 0.5rem; overflow-x: auto; margin-top: 0.5rem; font-size: 0.875rem; }
+        .chat-bubble-ai code, #aiPlanContainer code { font-family: monospace; }
+        .chat-bubble-ai ul, .chat-bubble-ai ol, #aiPlanContainer ul, #aiPlanContainer ol { margin-left: 1.25rem; margin-top: 0.5rem; margin-bottom: 0.5rem; }
+        .chat-bubble-ai p:last-child, #aiPlanContainer p:last-child { margin-bottom: 0; }
     </style>
 </head>
 <body class="bg-gray-100">
@@ -111,9 +77,7 @@
                 </div>
             </header>
 
-            <!-- Main content grid -->
             <div class="grid grid-cols-1 gap-8">
-                <!-- Cột 1: Trình soạn thảo -->
                 <div class="flex flex-col">
                     <h2 class="text-xl font-semibold text-gray-700 mb-2">1. Dự án</h2>
                     <div class="flex flex-grow border border-gray-300 rounded-lg shadow-md min-h-[600px]">
@@ -122,26 +86,21 @@
                     </div>
                 </div>
 
-                <!-- Cột 2: AI và các chức năng khác -->
                 <div class="flex flex-col">
                     <div class="bg-indigo-50 p-6 rounded-lg border border-indigo-200 h-full flex flex-col">
                         <h2 class="text-xl font-semibold text-gray-700">2. Trợ lý Chỉnh sửa AI</h2>
                         <p class="text-sm text-gray-500 mb-4">Thảo luận với AI để thực hiện các thay đổi trên dự án hiện tại.</p>
                         
-                        <div id="modificationChatHistory" class="bg-white p-3 border rounded-md overflow-y-auto mb-4 flex flex-col gap-2 h-72">
-                             <!-- Modification chat messages will be appended here -->
-                        </div>
+                        <div id="modificationChatHistory" class="bg-white p-3 border rounded-md overflow-y-auto mb-4 flex flex-col gap-2 h-72"></div>
                         
                         <div class="mt-auto">
                              <textarea id="modificationChatInput" rows="2" class="w-full p-2 border rounded-md" placeholder="Ví dụ: 'Tạo một ứng dụng Todo List đơn giản'"></textarea>
                             
                             <div class="mt-4">
-                                <label for="file-attachment-input" class="block text-sm font-medium text-gray-700 mb-1">Đính kèm tệp (để cung cấp thêm ngữ cảnh cho AI)</label>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Đính kèm tệp (để cung cấp thêm ngữ cảnh cho AI)</label>
                                 <div class="flex items-center">
                                     <label class="w-full flex items-center px-4 py-2 bg-white text-indigo-600 rounded-lg shadow-sm tracking-wide uppercase border border-indigo-500 cursor-pointer hover:bg-indigo-600 hover:text-white">
-                                        <svg class="w-6 h-6 mr-3" fill="currentColor" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                                            <path d="M16.88 9.1A4 4 0 0 1 16 17H5a5 5 0 0 1-1-9.9V7a3 3 0 0 1 4.52-2.59A4.98 4.98 0 0 1 17 8c0 .38-.04.74-.12 1.1zM11 11h3l-4 4-4-4h3v-4h2v4z" />
-                                        </svg>
+                                        <svg class="w-6 h-6 mr-3" fill="currentColor" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M16.88 9.1A4 4 0 0 1 16 17H5a5 5 0 0 1-1-9.9V7a3 3 0 0 1 4.52-2.59A4.98 4.98 0 0 1 17 8c0 .38-.04.74-.12 1.1zM11 11h3l-4 4-4-4h3v-4h2v4z" /></svg>
                                         <span class="text-sm font-semibold">Chọn tệp...</span>
                                         <input type='file' id="file-attachment-input" class="hidden" multiple />
                                     </label>
@@ -153,27 +112,15 @@
                                 <input id="focus-mode-checkbox" type="checkbox" class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
                                 <label for="focus-mode-checkbox" class="ml-2 block text-sm text-gray-900">Chỉ làm việc trên vùng đã chọn (nếu có)</label>
                             </div>
-                             <div class="mt-2 grid grid-cols-1 sm:grid-cols-4 gap-4">
-                                <button id="modificationDiscussBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center">
-                                    <span id="modificationDiscussBtnText">Thảo luận</span>
-                                    <div id="modificationDiscussSpinner" class="spinner hidden ml-3"></div>
-                                </button>
-                                <button id="planBtn" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center">
-                                    <span id="planBtnText">Xem Kế hoạch</span>
-                                    <div id="planSpinner" class="spinner hidden ml-3"></div>
-                                </button>
-                                <button id="modificationGenerateBtn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center">
-                                    <span id="modificationGenerateBtnText">Tạo Đề xuất</span>
-                                    <div id="modificationGenerateSpinner" class="spinner hidden ml-3"></div>
-                                </button>
-                                <button id="regenerateFileBtn" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center" title="Ghi đè toàn bộ file với code mới từ AI. Hữu ích cho các thay đổi lớn trên file nhỏ.">
-                                    <span id="regenerateFileBtnText">Tái tạo File</span>
-                                    <div id="regenerateFileSpinner" class="spinner hidden ml-3"></div>
-                                </button>
+                             <div class="mt-2 grid grid-cols-1 sm:grid-cols-5 gap-4">
+                                <button id="modificationDiscussBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center"><span>Thảo luận</span><div class="spinner ml-3 hidden"></div></button>
+                                <button id="planBtn" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center"><span>Xem Kế hoạch</span><div class="spinner ml-3 hidden"></div></button>
+                                <button id="debugBtn" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center">Gỡ lỗi</button>
+                                <button id="modificationGenerateBtn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center"><span>Tạo Đề xuất</span><div class="spinner ml-3 hidden"></div></button>
+                                <button id="regenerateFileBtn" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center"><span>Tái tạo File</span><div class="spinner ml-3 hidden"></div></button>
                             </div>
                         </div>
                         
-                        <!-- NEW: AI Plan Container -->
                         <div id="aiPlanSection" class="hidden mt-8">
                             <h2 class="text-xl font-semibold text-gray-700 mb-2">3. Kế hoạch của AI</h2>
                             <div id="aiPlanContainer" class="bg-white p-4 rounded-lg shadow-inner border border-gray-200 max-h-96 overflow-y-auto"></div>
@@ -187,7 +134,6 @@
                         <div id="status" class="w-full bg-white p-4 rounded-md shadow-inner border text-gray-600 min-h-[50px]"></div>
                     </div>
                 </div>
-                 <!-- Cột 3: Xem trước (Preview) -->
                 <div class="flex flex-col mt-8"> 
                     <h2 class="text-xl font-semibold text-gray-700 mb-2">6. Xem trước trực quan</h2>
                     <button id="openModalBtn" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg shadow-md">Xem trước</button>
@@ -196,10 +142,8 @@
         </div>
     </div>
     
-    <!-- Context Menu -->
+    <!-- Modals -->
     <div id="contextMenu" class="hidden"></div>
-
-    <!-- Preview Modal -->
     <div id="previewModal" class="hidden fixed inset-0 z-50 overflow-y-auto overflow-x-hidden flex items-center justify-center bg-gray-900 bg-opacity-75">
         <div class="relative w-full h-[90vh] max-w-7xl mx-auto p-4 flex flex-col">
             <div class="relative bg-white rounded-lg shadow-xl flex flex-col flex-grow">
@@ -218,34 +162,22 @@
             </div>
         </div>
     </div>
-
-    <!-- New Project Chat Modal -->
     <div id="newProjectChatModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-75">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl flex flex-col h-[90vh]">
             <div class="flex justify-between items-center p-4 border-b">
                 <h3 class="text-xl font-semibold text-gray-800">Trợ lý Sáng tạo Dự án</h3>
                 <button id="closeNewProjectModalBtn" class="text-gray-400 hover:text-gray-600">&times;</button>
             </div>
-            <div id="newProjectChatHistory" class="p-6 flex-grow overflow-y-auto flex flex-col gap-4">
-                <!-- Chat messages will be appended here -->
-            </div>
+            <div id="newProjectChatHistory" class="p-6 flex-grow overflow-y-auto flex flex-col gap-4"></div>
             <div class="p-4 border-t bg-gray-50">
                 <textarea id="newProjectChatInput" rows="2" class="w-full p-2 border rounded-md" placeholder="Mô tả ý tưởng của bạn..."></textarea>
                 <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <button id="newProjectDiscussBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center">
-                        <span id="newProjectDiscussBtnText">Thảo luận</span>
-                        <div id="newProjectDiscussSpinner" class="spinner hidden ml-3"></div>
-                    </button>
-                    <button id="newProjectGenerateBtn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center">
-                        <span id="newProjectGenerateBtnText">Tạo Dự án từ cuộc trò chuyện</span>
-                        <div id="newProjectGenerateSpinner" class="spinner hidden ml-3"></div>
-                    </button>
+                    <button id="newProjectDiscussBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center"><span>Thảo luận</span><div class="spinner ml-3 hidden"></div></button>
+                    <button id="newProjectGenerateBtn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center"><span>Tạo Dự án</span><div class="spinner ml-3 hidden"></div></button>
                 </div>
             </div>
         </div>
     </div>
-
-    <!-- Load Project Modal -->
     <div id="loadProjectModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-75">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl">
             <div class="flex justify-between items-center p-4 border-b">
@@ -255,31 +187,39 @@
             <div id="load-modal-content" class="p-6 max-h-96 overflow-y-auto"></div>
         </div>
     </div>
-    
-    <!-- Generic Modal -->
-    <div id="genericModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-gray-900 bg-opacity-75 transition-opacity duration-300">
-        <div class="bg-white rounded-lg shadow-xl w-full max-w-lg flex flex-col transform scale-95 transition-transform duration-300">
+    <div id="genericModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-gray-900 bg-opacity-75">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-lg flex flex-col">
             <div class="flex justify-between items-center p-4 border-b">
                 <h3 id="modalTitle" class="text-xl font-semibold text-gray-800"></h3>
                 <button id="modalCloseBtn" class="text-gray-400 hover:text-gray-600">&times;</button>
             </div>
-            <div id="modalContent" class="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
-                <!-- Content will be injected here by JS -->
+            <div id="modalContent" class="p-6 space-y-4 max-h-[60vh] overflow-y-auto"></div>
+            <div id="modalActions" class="flex justify-end p-4 bg-gray-50 border-t rounded-b-lg space-x-3"></div>
+        </div>
+    </div>
+    <!-- NEW: Debug Modal -->
+    <div id="debugModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-gray-900 bg-opacity-75">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl flex flex-col">
+            <div class="flex justify-between items-center p-4 border-b">
+                <h3 class="text-xl font-semibold text-gray-800">Trợ lý Gỡ lỗi</h3>
+                <button id="closeDebugModalBtn" class="text-gray-400 hover:text-gray-600">&times;</button>
             </div>
-            <div id="modalActions" class="flex justify-end p-4 bg-gray-50 border-t rounded-b-lg space-x-3">
-                <!-- Action buttons will be injected here by JS -->
+            <div class="p-6 space-y-4">
+                <p class="text-sm text-gray-600">Dán toàn bộ thông báo lỗi từ console của trình duyệt vào đây. AI sẽ phân tích nó cùng với file đang mở để tìm ra nguyên nhân và đề xuất cách sửa.</p>
+                <textarea id="errorInput" rows="8" class="w-full p-2 border rounded-md font-mono text-sm" placeholder="TypeError: Cannot read properties of null..."></textarea>
+            </div>
+            <div class="flex justify-end p-4 bg-gray-50 border-t rounded-b-lg space-x-3">
+                 <button id="cancelDebugBtn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">Hủy</button>
+                 <button id="analyzeErrorBtn" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Phân tích Lỗi</button>
             </div>
         </div>
     </div>
-
-    <!-- Full Screen Loader -->
     <div id="fullScreenLoader" class="hidden fixed inset-0 z-[200] flex items-center justify-center bg-white bg-opacity-80">
         <div class="flex flex-col items-center">
             <div class="loader-spin"></div>
             <p id="loaderText" class="mt-4 text-lg font-semibold text-gray-700">Đang xử lý...</p>
         </div>
     </div>
-
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-app.js";
@@ -310,7 +250,7 @@
         let newProjectChatHistory = [];
         let modificationChatHistory = [];
         let attachedFiles = [];
-        let currentAiPlan = null; // NEW: To store the AI's plan
+        let currentAiPlan = null;
 
         // --- DOM Elements ---
         const authScreen = document.getElementById('auth-screen');
@@ -330,10 +270,15 @@
         const newProjectChatModal = document.getElementById('newProjectChatModal');
         const fileAttachmentInput = document.getElementById('file-attachment-input');
         const attachedFilesList = document.getElementById('attached-files-list');
-        // NEW: Plan elements
         const planBtn = document.getElementById('planBtn');
         const aiPlanSection = document.getElementById('aiPlanSection');
         const aiPlanContainer = document.getElementById('aiPlanContainer');
+        const debugModal = document.getElementById('debugModal');
+        const debugBtn = document.getElementById('debugBtn');
+        const closeDebugModalBtn = document.getElementById('closeDebugModalBtn');
+        const cancelDebugBtn = document.getElementById('cancelDebugBtn');
+        const analyzeErrorBtn = document.getElementById('analyzeErrorBtn');
+        const errorInput = document.getElementById('errorInput');
 
         // --- Firebase Initialization ---
         const app = initializeApp(firebaseConfig);
@@ -399,7 +344,6 @@
         }
 
         function loadProjectFromData(filesData) {
-            // Dispose old models if they exist
             if (projectModels) {
                 Object.values(projectModels).forEach(model => model.dispose());
             }
@@ -433,7 +377,7 @@
             });
 
             if (currentProjectId) {
-                const commitMessage = await showPrompt("Lưu phiên bản mới", "Nhập ghi chú cho phiên bản này (ví dụ: 'Thêm nút đăng nhập'):", "");
+                const commitMessage = await showPrompt("Lưu phiên bản mới", "Nhập ghi chú cho phiên bản này:", "");
                 if (commitMessage === null) return;
 
                 showLoader("Đang lưu phiên bản...");
@@ -1112,23 +1056,20 @@
             }
         }
         
-        // NEW: Function to generate the AI's plan
-        async function handleGeneratePlan() {
+        async function handleGeneratePlan(debugInfo = null) {
             const lastUserMessage = document.getElementById('modificationChatInput').value.trim();
-            // The plan is based on the whole conversation. It's only invalid if there's no history AND no new message.
-            if (modificationChatHistory.length <= 1 && !lastUserMessage) { // <=1 because the first message is from AI
+            if (modificationChatHistory.length <= 1 && !lastUserMessage && !debugInfo) {
                 showAlert("Thiếu thông tin", "Vui lòng bắt đầu một cuộc thảo luận hoặc nhập yêu cầu của bạn.");
                 return;
             }
 
-            // If there is a new message, add it to history to make the plan consistent
             if (lastUserMessage) {
                 addMessageToModificationChat('user', lastUserMessage);
                 document.getElementById('modificationChatInput').value = '';
             }
 
-            const planBtnText = document.getElementById('planBtnText');
-            const planSpinner = document.getElementById('planSpinner');
+            const planBtnText = planBtn.querySelector('span');
+            const planSpinner = planBtn.querySelector('.spinner');
 
             planBtn.disabled = true;
             planBtnText.textContent = 'Đang lên kế hoạch...';
@@ -1138,15 +1079,22 @@
 
             try {
                 let projectContext = '';
-                Object.entries(projectModels).forEach(([path, model]) => {
-                    projectContext += `--- START OF ${path} ---\n${model.getValue()}\n--- END OF ${path} ---\n\n`;
-                });
+                if (debugInfo) {
+                     projectContext = `--- START OF ${activeFilePath} ---\n${monacoEditor.getValue()}\n--- END OF ${activeFilePath} ---\n\n`;
+                } else {
+                    Object.entries(projectModels).forEach(([path, model]) => {
+                        projectContext += `--- START OF ${path} ---\n${model.getValue()}\n--- END OF ${path} ---\n\n`;
+                    });
+                }
                 const attachedFilesContext = getAttachedFilesContext();
 
-                const planningPrompt = `You are a senior software architect. Your task is to analyze the user's request based on the entire conversation and create a step-by-step implementation plan. For each step, describe the change and mention the most appropriate action (\`modify\`, \`add\`, \`rename_symbol\`, etc.) you would use. Your output MUST be only the Markdown plan. DO NOT generate the final JSON object.
+                const userRequest = debugInfo 
+                    ? `The user has encountered an error. Please analyze the error message and the relevant file to create a fix plan.\nERROR MESSAGE:\n${debugInfo.errorMessage}`
+                    : `OUR DISCUSSION:\n${modificationChatHistory.map(m => `${m.role}: ${m.text}`).join('\n')}`;
+
+                const planningPrompt = `You are a senior software architect. Your task is to analyze the user's request and create a step-by-step implementation plan. For each step, describe the change and mention the most appropriate action (\`modify\`, \`add\`, \`rename_symbol\`, etc.) you would use. Your output MUST be only the Markdown plan. DO NOT generate the final JSON object.
                 
-                OUR DISCUSSION:
-                ${modificationChatHistory.map(m => `${m.role}: ${m.text}`).join('\n')}
+                ${userRequest}
 
                 PROJECT FILES:
                 ${projectContext}
@@ -1172,7 +1120,6 @@
 
 
         async function handleGenerateModification() {
-            // Check if there is any conversation or a pending user message.
             if (modificationChatHistory.length <= 1 && !document.getElementById('modificationChatInput').value.trim()) {
                  showAlert("Thiếu thông tin", "Vui lòng bắt đầu một cuộc thảo luận hoặc nhập yêu cầu trước khi tạo đề xuất.");
                 return;
@@ -1180,8 +1127,8 @@
             undoStacks = {};
             
             const generateBtn = document.getElementById('modificationGenerateBtn');
-            const spinner = document.getElementById('modificationGenerateSpinner');
-            const btnText = document.getElementById('modificationGenerateBtnText');
+            const spinner = generateBtn.querySelector('.spinner');
+            const btnText = generateBtn.querySelector('span');
 
             generateBtn.disabled = true;
             btnText.textContent = 'Đang tạo...';
@@ -1265,7 +1212,7 @@ ${taskDescription}`;
                 showAlert("Lỗi AI", error.message);
             } finally {
                 generateBtn.disabled = false;
-                btnText.textContent = 'Tạo Đề xuất Sửa đổi';
+                btnText.textContent = 'Tạo Đề xuất';
                 spinner.classList.add('hidden');
             }
         }
@@ -1291,7 +1238,6 @@ ${taskDescription}`;
                 card.className = 'bg-white p-4 mb-4 rounded-lg shadow-md';
                 card.id = change.uniqueId;
                 
-                // Simplified rendering logic using a switch statement for clarity
                 switch (change.action) {
                     case 'create':
                         card.innerHTML = `<p class="font-semibold text-gray-800">${change.description || 'Tạo tệp mới'}</p>
@@ -1374,7 +1320,6 @@ ${taskDescription}`;
                 card.appendChild(undoButtonContainer);
                 aiResponseContainer.appendChild(card);
                 
-                // Initialize Monaco instances for previews where needed
                 if (['create', 'add', 'inject_into_function'].includes(change.action)) {
                     const codeToShow = change.newCode || change.codeToInject;
                     monaco.editor.create(document.getElementById(`editor-container-${change.uniqueId}`), { value: codeToShow, language: getLanguageForFile(change.file), readOnly: true, automaticLayout: true, theme: 'vs-light' });
@@ -1616,8 +1561,8 @@ ${taskDescription}`;
             inputEl.value = '';
 
             const discussBtn = document.getElementById('newProjectDiscussBtn');
-            const spinner = document.getElementById('newProjectDiscussSpinner');
-            const btnText = document.getElementById('newProjectDiscussBtnText');
+            const spinner = discussBtn.querySelector('.spinner');
+            const btnText = discussBtn.querySelector('span');
 
             discussBtn.disabled = true;
             btnText.textContent = 'AI đang nghĩ...';
@@ -1651,8 +1596,8 @@ ${taskDescription}`;
             }
 
             const generateBtn = document.getElementById('newProjectGenerateBtn');
-            const spinner = document.getElementById('newProjectGenerateSpinner');
-            const btnText = document.getElementById('newProjectGenerateBtnText');
+            const spinner = generateBtn.querySelector('.spinner');
+            const btnText = generateBtn.querySelector('span');
 
             generateBtn.disabled = true;
             btnText.textContent = 'Đang tạo...';
@@ -1689,7 +1634,7 @@ ${taskDescription}`;
                 showAlert("Lỗi", `Đã xảy ra lỗi khi tạo dự án: ${error.message}`);
             } finally {
                 generateBtn.disabled = false;
-                btnText.textContent = 'Tạo Dự án từ cuộc trò chuyện';
+                btnText.textContent = 'Tạo Dự án';
                 spinner.classList.add('hidden');
                 hideLoader();
             }
@@ -1731,8 +1676,8 @@ ${taskDescription}`;
             inputEl.value = '';
 
             const discussBtn = document.getElementById('modificationDiscussBtn');
-            const spinner = document.getElementById('modificationDiscussSpinner');
-            const btnText = document.getElementById('modificationDiscussBtnText');
+            const spinner = discussBtn.querySelector('.spinner');
+            const btnText = discussBtn.querySelector('span');
 
             discussBtn.disabled = true;
             btnText.textContent = 'AI đang nghĩ...';
@@ -1780,8 +1725,8 @@ ${taskDescription}`;
             if (!confirmed) return;
 
             const regenerateBtn = document.getElementById('regenerateFileBtn');
-            const spinner = document.getElementById('regenerateFileSpinner');
-            const btnText = document.getElementById('regenerateFileBtnText');
+            const spinner = regenerateBtn.querySelector('.spinner');
+            const btnText = regenerateBtn.querySelector('span');
 
             regenerateBtn.disabled = true;
             btnText.textContent = 'Đang tái tạo...';
@@ -1962,13 +1907,29 @@ ${taskDescription}`;
 
             // Modification Chat Buttons
             document.getElementById('modificationDiscussBtn').addEventListener('click', handleModificationDiscussion);
-            document.getElementById('planBtn').addEventListener('click', handleGeneratePlan);
+            document.getElementById('planBtn').addEventListener('click', () => handleGeneratePlan());
             document.getElementById('modificationGenerateBtn').addEventListener('click', handleGenerateModification);
             document.getElementById('regenerateFileBtn').addEventListener('click', handleRegenerateFile);
             
+            // Debug Button & Modal
+            debugBtn.addEventListener('click', () => {
+                errorInput.value = '';
+                debugModal.classList.remove('hidden');
+            });
+            closeDebugModalBtn.addEventListener('click', () => debugModal.classList.add('hidden'));
+            cancelDebugBtn.addEventListener('click', () => debugModal.classList.add('hidden'));
+            analyzeErrorBtn.addEventListener('click', () => {
+                const errorMessage = errorInput.value.trim();
+                if (errorMessage) {
+                    debugModal.classList.add('hidden');
+                    handleGeneratePlan({ errorMessage });
+                } else {
+                    showAlert("Thiếu thông tin", "Vui lòng dán thông báo lỗi vào ô.");
+                }
+            });
+
             // File Attachment Listener
             fileAttachmentInput.addEventListener('change', handleFileSelect);
-
         }
         
         // Attach auth listeners immediately on load
@@ -1992,7 +1953,6 @@ ${taskDescription}`;
                 document.getElementById('auth-error').textContent = error.message;
             }
         });
-
     </script>
 </body>
 </html>
