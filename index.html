@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototype Động - Sửa code bất kỳ với AI (v40.1 - Full Code Fix)</title>
+    <title>Prototype Động - Sửa code bất kỳ với AI (v40.2 - UI Improvements)</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -91,7 +91,8 @@
                         <h2 class="text-xl font-semibold text-gray-700">2. Trợ lý Chỉnh sửa AI</h2>
                         <p class="text-sm text-gray-500 mb-4">Thảo luận với AI để thực hiện các thay đổi trên dự án hiện tại.</p>
                         
-                        <div id="modificationChatHistory" class="bg-white p-3 border rounded-md overflow-y-auto mb-4 flex flex-col gap-2 h-72"></div>
+                        <!-- CHANGE 1: Increased chat history height -->
+                        <div id="modificationChatHistory" class="bg-white p-3 border rounded-md overflow-y-auto mb-4 flex flex-col gap-2 h-[36rem]"></div>
                         
                         <div class="mt-auto">
                              <textarea id="modificationChatInput" rows="2" class="w-full p-2 border rounded-md" placeholder="Ví dụ: 'Tạo một ứng dụng Todo List đơn giản'"></textarea>
@@ -127,7 +128,8 @@
                         </div>
 
                         <h2 class="text-xl font-semibold text-gray-700 mt-8 mb-2">4. Đề xuất của AI</h2>
-                        <div id="aiResponseContainer" class="h-96 overflow-y-auto">
+                        <!-- CHANGE 2: Flexible proposal container height -->
+                        <div id="aiResponseContainer" class="overflow-y-auto min-h-[12rem] max-h-[48rem]">
                             <p id="aiResponsePlaceholder" class="text-gray-500">Đề xuất của AI sẽ xuất hiện ở đây...</p>
                         </div>
                         <h2 class="text-xl font-semibold text-gray-700 mt-8 mb-2">5. Trạng thái</h2>
