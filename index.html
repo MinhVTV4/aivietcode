@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototype Động - Sửa code bất kỳ với AI (v40.2 - UI Improvements)</title>
+    <title>Prototype Động - Sửa code bất kỳ với AI (v42.0 - On-Demand Explanation)</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -21,7 +21,7 @@
         .folder-arrow { transition: transform 0.1s linear; }
         .folder-arrow.open { transform: rotate(90deg); }
         #contextMenu { position: absolute; z-index: 1000; background-color: white; border: 1px solid #e5e7eb; border-radius: 0.375rem; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); padding: 0.5rem 0; min-width: 150px; }
-        .context-menu-item { display: block; width: 100%; padding: 0.5rem 1rem; font-size: 0.875rem; text-align: left; }
+        .context-menu-item { display: block; width: 100%; padding: 0.5rem 1rem; font-size: 0.875rem; text-align: left; background: none; border: none; cursor: pointer;}
         .context-menu-item:hover { background-color: #f3f4f6; }
         
         .loader-spin {
@@ -36,10 +36,11 @@
         .chat-bubble { max-width: 80%; padding: 0.75rem 1rem; border-radius: 1rem; margin-bottom: 0.5rem; word-wrap: break-word; }
         .chat-bubble-user { background-color: #4338ca; color: white; align-self: flex-end; border-bottom-right-radius: 0.25rem; }
         .chat-bubble-ai { background-color: #e5e7eb; color: #1f2937; align-self: flex-start; border-bottom-left-radius: 0.25rem; }
-        .chat-bubble-ai pre, #aiPlanContainer pre { background-color: #1f2937; color: #e5e7eb; padding: 0.75rem; border-radius: 0.5rem; overflow-x: auto; margin-top: 0.5rem; font-size: 0.875rem; }
-        .chat-bubble-ai code, #aiPlanContainer code { font-family: monospace; }
-        .chat-bubble-ai ul, .chat-bubble-ai ol, #aiPlanContainer ul, #aiPlanContainer ol { margin-left: 1.25rem; margin-top: 0.5rem; margin-bottom: 0.5rem; }
-        .chat-bubble-ai p:last-child, #aiPlanContainer p:last-child { margin-bottom: 0; }
+        .chat-bubble-ai pre, #aiPlanContainer pre, #modalContent pre { background-color: #1f2937; color: #e5e7eb; padding: 0.75rem; border-radius: 0.5rem; overflow-x: auto; margin-top: 0.5rem; font-size: 0.875rem; }
+        .chat-bubble-ai code, #aiPlanContainer code, #modalContent code { font-family: monospace; }
+        .chat-bubble-ai ul, .chat-bubble-ai ol, #aiPlanContainer ul, #aiPlanContainer ol, #modalContent ul, #modalContent ol { margin-left: 1.25rem; margin-top: 0.5rem; margin-bottom: 0.5rem; }
+        .chat-bubble-ai p:last-child, #aiPlanContainer p:last-child, #modalContent p:last-child { margin-bottom: 0; }
+        #modalContent h1, #modalContent h2, #modalContent h3 { font-weight: bold; margin-top: 1rem; margin-bottom: 0.5rem;}
     </style>
 </head>
 <body class="bg-gray-100">
@@ -91,7 +92,6 @@
                         <h2 class="text-xl font-semibold text-gray-700">2. Trợ lý Chỉnh sửa AI</h2>
                         <p class="text-sm text-gray-500 mb-4">Thảo luận với AI để thực hiện các thay đổi trên dự án hiện tại.</p>
                         
-                        <!-- CHANGE 1: Increased chat history height -->
                         <div id="modificationChatHistory" class="bg-white p-3 border rounded-md overflow-y-auto mb-4 flex flex-col gap-2 h-[36rem]"></div>
                         
                         <div class="mt-auto">
@@ -128,7 +128,6 @@
                         </div>
 
                         <h2 class="text-xl font-semibold text-gray-700 mt-8 mb-2">4. Đề xuất của AI</h2>
-                        <!-- CHANGE 2: Flexible proposal container height -->
                         <div id="aiResponseContainer" class="overflow-y-auto min-h-[12rem] max-h-[48rem]">
                             <p id="aiResponsePlaceholder" class="text-gray-500">Đề xuất của AI sẽ xuất hiện ở đây...</p>
                         </div>
@@ -199,7 +198,6 @@
             <div id="modalActions" class="flex justify-end p-4 bg-gray-50 border-t rounded-b-lg space-x-3"></div>
         </div>
     </div>
-    <!-- NEW: Debug Modal -->
     <div id="debugModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-gray-900 bg-opacity-75">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl flex flex-col">
             <div class="flex justify-between items-center p-4 border-b">
@@ -654,38 +652,54 @@
         function showContextMenu(e) {
             e.preventDefault();
             const target = e.target.closest('[data-path], #fileExplorer');
+            if (!target) return;
             const path = target.dataset.path || '';
 
-            let menuItems = '';
+            contextMenu.innerHTML = ''; // Clear previous menu
+
             const { item } = findItemAndParentByPath(path);
             const targetType = item ? item.type : 'root';
 
+            // Helper function to create a menu item button
+            const createMenuItem = (text, onClickHandler) => {
+                const button = document.createElement('button');
+                button.className = 'context-menu-item';
+                button.textContent = text;
+                button.addEventListener('click', () => {
+                    hideContextMenu();
+                    onClickHandler();
+                });
+                return button;
+            };
+
             if (targetType === 'file') {
-                menuItems = `<button class="context-menu-item" onclick="window.handleRename('${path}')">Đổi tên</button>
-                             <button class="context-menu-item" onclick="window.handleDelete('${path}')">Xóa</button>`;
+                contextMenu.appendChild(createMenuItem('Đổi tên', () => handleRename(path)));
+                contextMenu.appendChild(createMenuItem('Xóa', () => handleDelete(path)));
             } else { // Folder or root
-                menuItems = `<button class="context-menu-item" onclick="window.handleNewFile('${path}')">Tệp mới</button>
-                             <button class="context-menu-item" onclick="window.handleNewFolder('${path}')">Thư mục mới</button>`;
+                contextMenu.appendChild(createMenuItem('Tệp mới', () => handleNewFile(path)));
+                contextMenu.appendChild(createMenuItem('Thư mục mới', () => handleNewFolder(path)));
+
                 if (targetType === 'folder') {
-                    menuItems += `<div class="my-1 h-px bg-gray-200"></div>
-                                  <button class="context-menu-item" onclick="window.handleRename('${path}')">Đổi tên</button>
-                                  <button class="context-menu-item" onclick="window.handleDelete('${path}')">Xóa</button>`;
+                    const separator = document.createElement('div');
+                    separator.className = 'my-1 h-px bg-gray-200';
+                    contextMenu.appendChild(separator);
+                    contextMenu.appendChild(createMenuItem('Đổi tên', () => handleRename(path)));
+                    contextMenu.appendChild(createMenuItem('Xóa', () => handleDelete(path)));
                 }
             }
             
-            contextMenu.innerHTML = menuItems;
             contextMenu.style.left = `${e.pageX}px`;
             contextMenu.style.top = `${e.pageY}px`;
             contextMenu.classList.remove('hidden');
         }
+
 
         function hideContextMenu() {
             contextMenu.classList.add('hidden');
         }
 
         // --- File Operations ---
-        window.handleNewFile = async (parentPath) => {
-            hideContextMenu();
+        async function handleNewFile(parentPath) {
             const filename = await showPrompt("Tạo tệp mới", "Nhập tên tệp:", "new-file.js");
             if (!filename) return;
 
@@ -705,8 +719,7 @@
             switchFile(newPath);
         };
 
-        window.handleNewFolder = async (parentPath) => {
-            hideContextMenu();
+        async function handleNewFolder(parentPath) {
             const foldername = await showPrompt("Tạo thư mục mới", "Nhập tên thư mục:", "new-folder");
             if (!foldername) return;
 
@@ -722,8 +735,7 @@
             renderFileExplorer();
         };
 
-        window.handleRename = async (path) => {
-            hideContextMenu();
+        async function handleRename(path) {
             const { item, parent, key } = findItemAndParentByPath(path);
             if (!item) return;
 
@@ -761,8 +773,7 @@
             renderFileExplorer();
         };
 
-        window.handleDelete = async (path, skipConfirm = false) => {
-            hideContextMenu();
+        async function handleDelete(path, skipConfirm = false) {
             const { item, parent, key } = findItemAndParentByPath(path);
             if (!item) return;
             
@@ -1148,9 +1159,12 @@
                 const selectedText = monacoEditor.getModel().getValueInRange(selection);
                 const attachedFilesContext = getAttachedFilesContext();
 
+                // UPDATED: Prompt now explicitly tells the AI to not include reasoning.
                 const taskDescription = `
 TASK:
-Generate a JSON object with a "changes" array. Each object represents a specific action. Choose the most appropriate action for the user's request.
+Generate a JSON object with a "changes" array. Each object represents a specific action.
+Do NOT include any "reasoning" or "explanation" fields in the JSON objects. The explanation will be generated later in a separate step.
+
 - "modify": For changing an existing block of code.
   - Structure: { "action": "modify", "file": "...", "oldCode": "...", "newCode": "..." }
 - "refactor": Like "modify", but for improving code quality without changing functionality.
@@ -1218,6 +1232,8 @@ ${taskDescription}`;
                 spinner.classList.add('hidden');
             }
         }
+        
+        // --- Card Rendering Logic (Refactored) ---
 
         function renderChangeList(changes) {
             activeDiffEditors.forEach(d => {
@@ -1226,124 +1242,180 @@ ${taskDescription}`;
                 d.modifiedModel.dispose();
             });
             activeDiffEditors = [];
-
             aiResponseContainer.innerHTML = '';
+
             if (changes.length === 0) {
                 aiResponsePlaceholder.textContent = "AI không tìm thấy thay đổi nào.";
                 aiResponseContainer.appendChild(aiResponsePlaceholder);
                 return;
             }
 
+            const renderers = {
+                'create': renderCreateCard,
+                'add': renderAddCard,
+                'remove': renderRemoveCard,
+                'modify': renderModifyCard,
+                'refactor': renderModifyCard,
+                'inject_into_function': renderInjectCard,
+                'rename_symbol': renderRenameCard,
+                'wrap_code': renderWrapCard,
+                'extract_to_function': renderExtractCard,
+            };
+
             changes.forEach((change, i) => {
                 change.uniqueId = `change-${i}`;
-                const card = document.createElement('div');
-                card.className = 'bg-white p-4 mb-4 rounded-lg shadow-md';
-                card.id = change.uniqueId;
-                
-                switch (change.action) {
-                    case 'create':
-                        card.innerHTML = `<p class="font-semibold text-gray-800">${change.description || 'Tạo tệp mới'}</p>
-                                          <p class="text-sm text-gray-500 mt-2">Tạo tệp mới: <code class="font-mono bg-gray-200 p-1 rounded">${change.file}</code></p>
-                                          <div class="mt-2 w-full h-64 border border-gray-300 rounded-md" id="editor-container-${change.uniqueId}"></div>`;
-                        break;
-                    case 'add':
-                        card.innerHTML = `<p class="font-semibold text-gray-800">${change.description || 'Thêm code mới'}</p>
-                                          <p class="text-sm text-gray-500 mt-2">Trong tệp: <code class="font-mono bg-gray-200 p-1 rounded">${change.file}</code></p>
-                                          <p class="text-sm text-gray-500 mt-1">Sẽ được thêm vào ${change.position === 'after' ? 'sau' : 'trước'} khối code:</p>
-                                          <pre class="text-xs bg-gray-100 p-2 rounded mt-1"><code>${change.anchorCode}</code></pre>
-                                          <div class="mt-2 w-full h-64 border border-gray-300 rounded-md" id="editor-container-${change.uniqueId}"></div>`;
-                        break;
-                    case 'remove':
-                        card.innerHTML = `<p class="font-semibold text-gray-800">${change.description || 'Xóa code'}</p>
-                                          <p class="text-sm text-gray-500 mt-2">Trong tệp: <code class="font-mono bg-gray-200 p-1 rounded">${change.file}</code></p>
-                                          <p class="text-sm text-gray-500 mt-1">Khối code sau sẽ bị xóa:</p>
-                                          <div class="mt-2 w-full h-64 border border-red-300 rounded-md" id="editor-container-${change.uniqueId}"></div>`;
-                        break;
-                    case 'refactor':
-                        card.innerHTML = `<p class="font-semibold text-purple-700 flex items-center">${change.description || 'Đề xuất Tái cấu trúc (Refactor)'}</p>
-                                          <p class="text-sm text-gray-500 mt-2">Trong tệp: <code class="font-mono bg-gray-200 p-1 rounded">${change.file}</code></p>
-                                          <div id="diff-container-${change.uniqueId}" class="mt-2 w-full h-64 border border-purple-300 rounded-md"></div>`;
-                        break;
-                    case 'inject_into_function':
-                        card.innerHTML = `<p class="font-semibold text-cyan-700 flex items-center">${change.description || 'Chèn code vào hàm'}</p>
-                                          <p class="text-sm text-gray-500 mt-2">Sẽ chèn vào ${change.position === 'start' ? 'đầu' : 'cuối'} hàm: <code class="font-mono bg-gray-200 p-1 rounded">${change.functionSignature}</code></p>
-                                          <div class="mt-2 w-full h-64 border border-cyan-300 rounded-md" id="editor-container-${change.uniqueId}"></div>`;
-                        break;
-                    case 'rename_symbol':
-                         card.innerHTML = `<p class="font-semibold text-blue-700 flex items-center">${change.description || 'Đổi tên ký hiệu'}</p>
-                                          <p class="text-sm text-gray-500 mt-2">Đổi tên <code class="font-mono bg-gray-200 p-1 rounded">${change.old_name}</code> thành <code class="font-mono bg-gray-200 p-1 rounded">${change.new_name}</code></p>
-                                          <p class="text-sm text-gray-500 mt-1">Phạm vi: ${change.file_scope.join(', ')}</p>`;
-                        break;
-                     case 'wrap_code':
-                        card.innerHTML = `<p class="font-semibold text-orange-700 flex items-center">${change.description || 'Bọc code'}</p>
-                                          <p class="text-sm text-gray-500 mt-2">Trong tệp: <code class="font-mono bg-gray-200 p-1 rounded">${change.file}</code></p>
-                                          <p class="text-sm text-gray-500 mt-1">Đoạn code sau sẽ được bọc:</p>
-                                          <div class="mt-2 w-full h-32 border border-orange-300 rounded-md" id="editor-container-wrap-${change.uniqueId}"></div>`;
-                        break;
-                    case 'extract_to_function':
-                         card.innerHTML = `<p class="font-semibold text-indigo-700 flex items-center">${change.description || 'Tách hàm'}</p>
-                                          <p class="text-sm text-gray-500 mt-2">Trong tệp: <code class="font-mono bg-gray-200 p-1 rounded">${change.file}</code></p>
-                                          <p class="text-sm text-gray-500 mt-1">Đoạn code sau sẽ được tách ra hàm mới <strong>${change.new_function_name}</strong>:</p>
-                                          <div class="mt-2 w-full h-48 border border-indigo-300 rounded-md" id="editor-container-extract-${change.uniqueId}"></div>`;
-                        break;
-                    default: // modify
-                        card.innerHTML = `<p class="font-semibold text-gray-800">${change.description || 'Sửa đổi code'}</p>
-                                          <p class="text-sm text-gray-500 mt-2">Trong tệp: <code class="font-mono bg-gray-200 p-1 rounded">${change.file}</code></p>
-                                          <div id="diff-container-${change.uniqueId}" class="mt-2 w-full h-64 border border-gray-300 rounded-md"></div>`;
-                        break;
-                }
-                
-                const buttonContainer = document.createElement('div');
-                buttonContainer.className = 'mt-4 flex flex-col sm:flex-row gap-2';
-
-                const applyButton = document.createElement('button');
-                applyButton.className = 'apply-button w-full sm:w-auto flex-grow bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg';
-                applyButton.textContent = 'Áp dụng';
-                applyButton.onclick = () => applySingleChange(change);
-                
-                const explainButton = document.createElement('button');
-                explainButton.className = 'explain-button w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg';
-                explainButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline-block mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" /></svg>Xem giải thích`;
-                explainButton.onclick = () => showAlert('Giải thích của AI', change.reasoning || 'AI không cung cấp giải thích cho thay đổi này.');
-
-                buttonContainer.appendChild(applyButton);
-                if(change.reasoning) buttonContainer.appendChild(explainButton);
-                
-                const applyButtonWrapper = document.createElement('div');
-                applyButtonWrapper.className = 'apply-buttons';
-                applyButtonWrapper.appendChild(buttonContainer);
-
-                const undoButtonContainer = document.createElement('div');
-                undoButtonContainer.className = 'undo-buttons mt-4 hidden';
-                undoButtonContainer.innerHTML = `<button class="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg">[↶] Hoàn tác</button>`;
-                undoButtonContainer.querySelector('button').addEventListener('click', () => undoChange(change.uniqueId));
-
-                card.appendChild(applyButtonWrapper);
-                card.appendChild(undoButtonContainer);
+                const renderFunction = renderers[change.action] || renderModifyCard; // Default to modify
+                const card = renderFunction(change);
                 aiResponseContainer.appendChild(card);
-                
-                if (['create', 'add', 'inject_into_function'].includes(change.action)) {
-                    const codeToShow = change.newCode || change.codeToInject;
-                    monaco.editor.create(document.getElementById(`editor-container-${change.uniqueId}`), { value: codeToShow, language: getLanguageForFile(change.file), readOnly: true, automaticLayout: true, theme: 'vs-light' });
-                } else if (change.action === 'remove') {
-                    monaco.editor.create(document.getElementById(`editor-container-${change.uniqueId}`), { value: change.codeToRemove, language: getLanguageForFile(change.file), readOnly: true, automaticLayout: true, theme: 'vs-light', extraEditorClassName: 'bg-red-50' });
-                } else if (['modify', 'refactor'].includes(change.action)) {
-                    const diffContainer = document.getElementById(`diff-container-${change.uniqueId}`);
-                    const originalModel = monaco.editor.createModel(change.oldCode, getLanguageForFile(change.file));
-                    const modifiedModel = monaco.editor.createModel(change.newCode, getLanguageForFile(change.file));
-                    const diffEditor = monaco.editor.createDiffEditor(diffContainer, { readOnly: true, automaticLayout: true, theme: 'vs-light' });
-                    diffEditor.setModel({ original: originalModel, modified: modifiedModel });
-                    activeDiffEditors.push({ editor: diffEditor, originalModel: originalModel, modifiedModel: modifiedModel });
-                } else if(change.action === 'wrap_code') {
-                    monaco.editor.create(document.getElementById(`editor-container-wrap-${change.uniqueId}`), { value: change.code_to_wrap, language: getLanguageForFile(change.file), readOnly: true, automaticLayout: true, theme: 'vs-light' });
-                } else if(change.action === 'extract_to_function') {
-                     monaco.editor.create(document.getElementById(`editor-container-extract-${change.uniqueId}`), { value: change.code_to_extract, language: getLanguageForFile(change.file), readOnly: true, automaticLayout: true, theme: 'vs-light' });
-                }
             });
         }
 
+        function createBaseCard(change) {
+            const card = document.createElement('div');
+            card.className = 'bg-white p-4 mb-4 rounded-lg shadow-md';
+            card.id = change.uniqueId;
+            return card;
+        }
+
+        // UPDATED: `addCardActions` now always shows the explain button and wires it to a new handler.
+        function addCardActions(card, change) {
+            const buttonContainer = document.createElement('div');
+            buttonContainer.className = 'mt-4 flex flex-col sm:flex-row gap-2';
+
+            const applyButton = document.createElement('button');
+            applyButton.className = 'apply-button w-full sm:w-auto flex-grow bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg';
+            applyButton.textContent = 'Áp dụng';
+            applyButton.onclick = () => applySingleChange(change);
+            buttonContainer.appendChild(applyButton);
+
+            const explainButton = document.createElement('button');
+            explainButton.className = 'explain-button w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center';
+            explainButton.innerHTML = `<span><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline-block mr-2 align-middle" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" /></svg>Giải thích</span>`;
+            explainButton.onclick = () => handleExplainChange(change);
+            buttonContainer.appendChild(explainButton);
+            
+            const applyButtonWrapper = document.createElement('div');
+            applyButtonWrapper.className = 'apply-buttons';
+            applyButtonWrapper.appendChild(buttonContainer);
+
+            const undoButtonContainer = document.createElement('div');
+            undoButtonContainer.className = 'undo-buttons mt-4 hidden';
+            undoButtonContainer.innerHTML = `<button class="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg">[↶] Hoàn tác</button>`;
+            undoButtonContainer.querySelector('button').addEventListener('click', () => undoChange(change.uniqueId));
+
+            card.appendChild(applyButtonWrapper);
+            card.appendChild(undoButtonContainer);
+        }
+
+        function renderCreateCard(change) {
+            const card = createBaseCard(change);
+            card.innerHTML = `<p class="font-semibold text-gray-800">${change.description || 'Tạo tệp mới'}</p>
+                              <p class="text-sm text-gray-500 mt-2">Tạo tệp mới: <code class="font-mono bg-gray-200 p-1 rounded">${change.file}</code></p>
+                              <div class="mt-2 w-full h-64 border border-gray-300 rounded-md" id="editor-container-${change.uniqueId}"></div>`;
+            addCardActions(card, change);
+            setTimeout(() => {
+                monaco.editor.create(document.getElementById(`editor-container-${change.uniqueId}`), { value: change.newCode, language: getLanguageForFile(change.file), readOnly: true, automaticLayout: true, theme: 'vs-light' });
+            }, 0);
+            return card;
+        }
+
+        function renderAddCard(change) {
+            const card = createBaseCard(change);
+            card.innerHTML = `<p class="font-semibold text-gray-800">${change.description || 'Thêm code mới'}</p>
+                              <p class="text-sm text-gray-500 mt-2">Trong tệp: <code class="font-mono bg-gray-200 p-1 rounded">${change.file}</code></p>
+                              <p class="text-sm text-gray-500 mt-1">Sẽ được thêm vào ${change.position === 'after' ? 'sau' : 'trước'} khối code:</p>
+                              <pre class="text-xs bg-gray-100 p-2 rounded mt-1"><code>${change.anchorCode}</code></pre>
+                              <div class="mt-2 w-full h-64 border border-gray-300 rounded-md" id="editor-container-${change.uniqueId}"></div>`;
+            addCardActions(card, change);
+            setTimeout(() => {
+                monaco.editor.create(document.getElementById(`editor-container-${change.uniqueId}`), { value: change.newCode, language: getLanguageForFile(change.file), readOnly: true, automaticLayout: true, theme: 'vs-light' });
+            }, 0);
+            return card;
+        }
+        
+        function renderRemoveCard(change) {
+            const card = createBaseCard(change);
+            card.innerHTML = `<p class="font-semibold text-gray-800">${change.description || 'Xóa code'}</p>
+                              <p class="text-sm text-gray-500 mt-2">Trong tệp: <code class="font-mono bg-gray-200 p-1 rounded">${change.file}</code></p>
+                              <p class="text-sm text-gray-500 mt-1">Khối code sau sẽ bị xóa:</p>
+                              <div class="mt-2 w-full h-64 border border-red-300 rounded-md" id="editor-container-${change.uniqueId}"></div>`;
+            addCardActions(card, change);
+            setTimeout(() => {
+                monaco.editor.create(document.getElementById(`editor-container-${change.uniqueId}`), { value: change.codeToRemove, language: getLanguageForFile(change.file), readOnly: true, automaticLayout: true, theme: 'vs-light', extraEditorClassName: 'bg-red-50' });
+            }, 0);
+            return card;
+        }
+
+        function renderModifyCard(change) {
+            const card = createBaseCard(change);
+            const isRefactor = change.action === 'refactor';
+            const title = change.description || (isRefactor ? 'Đề xuất Tái cấu trúc (Refactor)' : 'Sửa đổi code');
+            const borderColor = isRefactor ? 'border-purple-300' : 'border-gray-300';
+            card.innerHTML = `<p class="font-semibold text-gray-800">${title}</p>
+                              <p class="text-sm text-gray-500 mt-2">Trong tệp: <code class="font-mono bg-gray-200 p-1 rounded">${change.file}</code></p>
+                              <div id="diff-container-${change.uniqueId}" class="mt-2 w-full h-64 border ${borderColor} rounded-md"></div>`;
+            addCardActions(card, change);
+            setTimeout(() => {
+                const diffContainer = document.getElementById(`diff-container-${change.uniqueId}`);
+                const originalModel = monaco.editor.createModel(change.oldCode, getLanguageForFile(change.file));
+                const modifiedModel = monaco.editor.createModel(change.newCode, getLanguageForFile(change.file));
+                const diffEditor = monaco.editor.createDiffEditor(diffContainer, { readOnly: true, automaticLayout: true, theme: 'vs-light' });
+                diffEditor.setModel({ original: originalModel, modified: modifiedModel });
+                activeDiffEditors.push({ editor: diffEditor, originalModel: originalModel, modifiedModel: modifiedModel });
+            }, 0);
+            return card;
+        }
+
+        function renderInjectCard(change) {
+            const card = createBaseCard(change);
+            card.innerHTML = `<p class="font-semibold text-cyan-700 flex items-center">${change.description || 'Chèn code vào hàm'}</p>
+                              <p class="text-sm text-gray-500 mt-2">Sẽ chèn vào ${change.position === 'start' ? 'đầu' : 'cuối'} hàm: <code class="font-mono bg-gray-200 p-1 rounded">${change.functionSignature}</code></p>
+                              <div class="mt-2 w-full h-64 border border-cyan-300 rounded-md" id="editor-container-${change.uniqueId}"></div>`;
+            addCardActions(card, change);
+            setTimeout(() => {
+                monaco.editor.create(document.getElementById(`editor-container-${change.uniqueId}`), { value: change.codeToInject, language: getLanguageForFile(change.file), readOnly: true, automaticLayout: true, theme: 'vs-light' });
+            }, 0);
+            return card;
+        }
+
+        function renderRenameCard(change) {
+            const card = createBaseCard(change);
+            card.innerHTML = `<p class="font-semibold text-blue-700 flex items-center">${change.description || 'Đổi tên ký hiệu'}</p>
+                              <p class="text-sm text-gray-500 mt-2">Đổi tên <code class="font-mono bg-gray-200 p-1 rounded">${change.old_name}</code> thành <code class="font-mono bg-gray-200 p-1 rounded">${change.new_name}</code></p>
+                              <p class="text-sm text-gray-500 mt-1">Phạm vi: ${change.file_scope.join(', ')}</p>`;
+            addCardActions(card, change);
+            return card;
+        }
+
+        function renderWrapCard(change) {
+            const card = createBaseCard(change);
+            card.innerHTML = `<p class="font-semibold text-orange-700 flex items-center">${change.description || 'Bọc code'}</p>
+                              <p class="text-sm text-gray-500 mt-2">Trong tệp: <code class="font-mono bg-gray-200 p-1 rounded">${change.file}</code></p>
+                              <p class="text-sm text-gray-500 mt-1">Đoạn code sau sẽ được bọc:</p>
+                              <div class="mt-2 w-full h-32 border border-orange-300 rounded-md" id="editor-container-wrap-${change.uniqueId}"></div>`;
+            addCardActions(card, change);
+            setTimeout(() => {
+                monaco.editor.create(document.getElementById(`editor-container-wrap-${change.uniqueId}`), { value: change.code_to_wrap, language: getLanguageForFile(change.file), readOnly: true, automaticLayout: true, theme: 'vs-light' });
+            }, 0);
+            return card;
+        }
+
+        function renderExtractCard(change) {
+            const card = createBaseCard(change);
+            card.innerHTML = `<p class="font-semibold text-indigo-700 flex items-center">${change.description || 'Tách hàm'}</p>
+                              <p class="text-sm text-gray-500 mt-2">Trong tệp: <code class="font-mono bg-gray-200 p-1 rounded">${change.file}</code></p>
+                              <p class="text-sm text-gray-500 mt-1">Đoạn code sau sẽ được tách ra hàm mới <strong>${change.new_function_name}</strong>:</p>
+                              <div class="mt-2 w-full h-48 border border-indigo-300 rounded-md" id="editor-container-extract-${change.uniqueId}"></div>`;
+            addCardActions(card, change);
+            setTimeout(() => {
+                 monaco.editor.create(document.getElementById(`editor-container-extract-${change.uniqueId}`), { value: change.code_to_extract, language: getLanguageForFile(change.file), readOnly: true, automaticLayout: true, theme: 'vs-light' });
+            }, 0);
+            return card;
+        }
+
+        // --- Change Application Logic ---
+
         async function applySingleChange(change) {
-            const card = document.getElementById(change.uniqueId);
             const targetModel = projectModels[change.file];
 
             if (!targetModel && !['create', 'rename_symbol'].includes(change.action)) {
@@ -1351,162 +1423,182 @@ ${taskDescription}`;
                 return;
             }
 
-            let inverseEdits = [];
+            const applicators = {
+                'create': applyCreateChange,
+                'add': applyAddChange,
+                'remove': applyRemoveChange,
+                'modify': applyModifyChange,
+                'refactor': applyModifyChange,
+                'inject_into_function': applyInjectChange,
+                'rename_symbol': applyRenameChange,
+                'wrap_code': applyWrapChange,
+                'extract_to_function': applyExtractChange,
+            };
 
-            switch (change.action) {
-                case 'create':
-                    const parts = change.file.split('/');
-                    const filename = parts.pop();
-                    const parentPath = parts.join('/');
-                    const { item: parentFolder } = findItemByPath(parentPath);
-                    if (parentFolder && (parentPath === '' || parentFolder.type === 'folder')) {
-                        const targetChildren = parentPath ? parentFolder.children : projectStructure;
-                        targetChildren[filename] = { type: 'file' };
-                        projectModels[change.file] = monaco.editor.createModel(change.newCode, getLanguageForFile(change.file));
-                        projectModels[change.file].onDidChangeContent(updatePreview);
-                        undoStacks[change.uniqueId] = { action: 'create', path: change.file };
-                        renderFileExplorer();
-                        switchFile(change.file);
-                        statusEl.textContent = `Đã tạo tệp ${change.file}`;
-                    } else {
-                        await showAlert("Lỗi", `Không thể tạo tệp, thư mục cha "${parentPath}" không tồn tại.`);
-                        return;
-                    }
-                    break;
+            const applyFunction = applicators[change.action];
 
-                case 'add': {
-                    const matchRange = findCodeBlockRange(targetModel, change.anchorCode);
-                    if (matchRange) {
-                        let range, textToInsert;
-                        if (change.position === 'after') {
-                            range = new monaco.Range(matchRange.endLineNumber, targetModel.getLineMaxColumn(matchRange.endLineNumber), matchRange.endLineNumber, targetModel.getLineMaxColumn(matchRange.endLineNumber));
-                            textToInsert = '\n' + change.newCode;
-                        } else {
-                            range = new monaco.Range(matchRange.startLineNumber, 1, matchRange.startLineNumber, 1);
-                            textToInsert = change.newCode + '\n';
-                        }
-                        targetModel.pushEditOperations([], [{ range, text: textToInsert }], (inverse) => { inverseEdits = inverse; return null; });
-                        undoStacks[change.uniqueId] = { action: 'add', path: change.file, edits: inverseEdits };
-                        statusEl.textContent = `Đã thêm code vào ${change.file}`;
-                    } else {
-                        await showAlert("Lỗi", `Không tìm thấy khối code neo trong tệp ${change.file}.`);
-                        return;
-                    }
-                    break;
+            if (applyFunction) {
+                const success = await applyFunction(change, targetModel);
+                if (success) {
+                    const card = document.getElementById(change.uniqueId);
+                    card.querySelector('.apply-buttons').classList.add('hidden');
+                    card.querySelector('.undo-buttons').classList.remove('hidden');
                 }
-
-                case 'remove': {
-                    const matchRange = findCodeBlockRange(targetModel, change.codeToRemove);
-                    if (matchRange) {
-                        targetModel.pushEditOperations([], [{ range: matchRange, text: '' }], (inverse) => { inverseEdits = inverse; return null; });
-                        undoStacks[change.uniqueId] = { action: 'remove', path: change.file, edits: inverseEdits };
-                        statusEl.textContent = `Đã xóa code khỏi ${change.file}`;
-                    } else {
-                        await showAlert("Lỗi", `Không tìm thấy khối code cần xóa trong tệp ${change.file}.`);
-                        return;
-                    }
-                    break;
-                }
-                
-                case 'modify':
-                case 'refactor': {
-                    let matchRange = findCodeBlockRange(targetModel, change.oldCode);
-                    if (!matchRange) {
-                        console.warn("Exact fingerprint match failed. Trying anchor-based search...");
-                        statusEl.textContent = "So khớp chính xác thất bại, thử so khớp theo mỏ neo...";
-                        matchRange = findRangeByAnchor(targetModel, change.oldCode);
-                    }
-
-                    if (matchRange) {
-                        targetModel.pushEditOperations([], [{ range: matchRange, text: change.newCode }], (inverse) => { inverseEdits = inverse; return null; });
-                        undoStacks[change.uniqueId] = { action: change.action, path: change.file, edits: inverseEdits };
-                        statusEl.textContent = `Đã cập nhật tệp ${change.file}`;
-                    } else {
-                        await showAlert("Lỗi", `Không tìm thấy mã cũ trong tệp ${change.file}. Vui lòng thử áp dụng thủ công.`);
-                        return;
-                    }
-                    break;
-                }
-
-                case 'inject_into_function': {
-                    const injectionRange = findFunctionInjectionPoint(targetModel, change.functionSignature, change.position);
-                    if (injectionRange) {
-                        const textToInject = change.position === 'start' ? `\n${change.codeToInject}` : `${change.codeToInject}\n`;
-                        targetModel.pushEditOperations([], [{ range: injectionRange, text: textToInject }], (inverse) => { inverseEdits = inverse; return null; });
-                        undoStacks[change.uniqueId] = { action: 'inject_into_function', path: change.file, edits: inverseEdits };
-                        statusEl.textContent = `Đã chèn code vào hàm trong tệp ${change.file}`;
-                    } else {
-                         await showAlert("Lỗi", `Không tìm thấy hàm với chữ ký "${change.functionSignature}" trong tệp ${change.file}.`);
-                        return;
-                    }
-                    break;
-                }
-                
-                case 'rename_symbol': {
-                    let allInverseEdits = [];
-                    for (const filePath of change.file_scope) {
-                        const model = projectModels[filePath];
-                        if (model) {
-                            const matches = model.findMatches(change.old_name, false, false, true, null, true);
-                            const edits = matches.map(match => ({ range: match.range, text: change.new_name }));
-                            model.pushEditOperations([], edits, (inverse) => { allInverseEdits.push({path: filePath, edits: inverse}); return null; });
-                        }
-                    }
-                    undoStacks[change.uniqueId] = { action: 'rename_symbol', multi_file_edits: allInverseEdits };
-                    statusEl.textContent = `Đã đổi tên '${change.old_name}' thành '${change.new_name}'.`;
-                    break;
-                }
-
-                case 'wrap_code': {
-                    const matchRange = findCodeBlockRange(targetModel, change.code_to_wrap);
-                    if(matchRange) {
-                        const originalText = targetModel.getValueInRange(matchRange);
-                        const newText = `${change.prefix}${originalText}${change.suffix}`;
-                        targetModel.pushEditOperations([], [{ range: matchRange, text: newText }], (inverse) => { inverseEdits = inverse; return null; });
-                        undoStacks[change.uniqueId] = { action: 'wrap_code', path: change.file, edits: inverseEdits };
-                        statusEl.textContent = `Đã bọc code trong tệp ${change.file}`;
-                    } else {
-                        await showAlert("Lỗi", `Không tìm thấy đoạn code cần bọc trong tệp ${change.file}.`);
-                        return;
-                    }
-                    break;
-                }
-
-                case 'extract_to_function': {
-                    const matchRange = findCodeBlockRange(targetModel, change.code_to_extract);
-                    if (matchRange) {
-                        const newFunction = `\n\nfunction ${change.new_function_name}(${(change.new_function_parameters || []).join(', ')}) {\n    ${change.code_to_extract}\n}\n`;
-                        const endOfFile = new monaco.Range(targetModel.getLineCount() + 1, 1, targetModel.getLineCount() + 1, 1);
-                        
-                        targetModel.pushEditOperations([], [
-                            { range: matchRange, text: change.replace_with_call },
-                            { range: endOfFile, text: newFunction }
-                        ], (inverse) => { inverseEdits = inverse; return null; });
-
-                        undoStacks[change.uniqueId] = { action: 'extract_to_function', path: change.file, edits: inverseEdits };
-                        statusEl.textContent = `Đã tách code ra hàm mới trong tệp ${change.file}`;
-                    } else {
-                        await showAlert("Lỗi", `Không tìm thấy đoạn code cần tách trong tệp ${change.file}.`);
-                        return;
-                    }
-                    break;
-                }
-
-                default:
-                    await showAlert("Lỗi", `Hành động không xác định: ${change.action}`);
-                    return;
+            } else {
+                await showAlert("Lỗi", `Hành động không xác định: ${change.action}`);
             }
+        }
 
-            card.querySelector('.apply-buttons').classList.add('hidden');
-            card.querySelector('.undo-buttons').classList.remove('hidden');
+        async function applyCreateChange(change) {
+            const parts = change.file.split('/');
+            const filename = parts.pop();
+            const parentPath = parts.join('/');
+            const { item: parentFolder } = findItemByPath(parentPath);
+
+            if (parentFolder && (parentPath === '' || parentFolder.type === 'folder')) {
+                const targetChildren = parentPath ? parentFolder.children : projectStructure;
+                targetChildren[filename] = { type: 'file' };
+                projectModels[change.file] = monaco.editor.createModel(change.newCode, getLanguageForFile(change.file));
+                projectModels[change.file].onDidChangeContent(updatePreview);
+                undoStacks[change.uniqueId] = { action: 'create', path: change.file };
+                renderFileExplorer();
+                switchFile(change.file);
+                statusEl.textContent = `Đã tạo tệp ${change.file}`;
+                return true;
+            } else {
+                await showAlert("Lỗi", `Không thể tạo tệp, thư mục cha "${parentPath}" không tồn tại.`);
+                return false;
+            }
         }
         
+        async function applyAddChange(change, targetModel) {
+            const matchRange = findCodeBlockRange(targetModel, change.anchorCode);
+            if (matchRange) {
+                let range, textToInsert, inverseEdits;
+                if (change.position === 'after') {
+                    range = new monaco.Range(matchRange.endLineNumber, targetModel.getLineMaxColumn(matchRange.endLineNumber), matchRange.endLineNumber, targetModel.getLineMaxColumn(matchRange.endLineNumber));
+                    textToInsert = '\n' + change.newCode;
+                } else {
+                    range = new monaco.Range(matchRange.startLineNumber, 1, matchRange.startLineNumber, 1);
+                    textToInsert = change.newCode + '\n';
+                }
+                targetModel.pushEditOperations([], [{ range, text: textToInsert }], (inverse) => { inverseEdits = inverse; return null; });
+                undoStacks[change.uniqueId] = { action: 'add', path: change.file, edits: inverseEdits };
+                statusEl.textContent = `Đã thêm code vào ${change.file}`;
+                return true;
+            } else {
+                await showAlert("Lỗi", `Không tìm thấy khối code neo trong tệp ${change.file}.`);
+                return false;
+            }
+        }
+        
+        async function applyRemoveChange(change, targetModel) {
+            const matchRange = findCodeBlockRange(targetModel, change.codeToRemove);
+            if (matchRange) {
+                let inverseEdits;
+                targetModel.pushEditOperations([], [{ range: matchRange, text: '' }], (inverse) => { inverseEdits = inverse; return null; });
+                undoStacks[change.uniqueId] = { action: 'remove', path: change.file, edits: inverseEdits };
+                statusEl.textContent = `Đã xóa code khỏi ${change.file}`;
+                return true;
+            } else {
+                await showAlert("Lỗi", `Không tìm thấy khối code cần xóa trong tệp ${change.file}.`);
+                return false;
+            }
+        }
+
+        async function applyModifyChange(change, targetModel) {
+            let matchRange = findCodeBlockRange(targetModel, change.oldCode);
+            if (!matchRange) {
+                console.warn("Exact fingerprint match failed. Trying anchor-based search...");
+                statusEl.textContent = "So khớp chính xác thất bại, thử so khớp theo mỏ neo...";
+                matchRange = findRangeByAnchor(targetModel, change.oldCode);
+            }
+
+            if (matchRange) {
+                let inverseEdits;
+                targetModel.pushEditOperations([], [{ range: matchRange, text: change.newCode }], (inverse) => { inverseEdits = inverse; return null; });
+                undoStacks[change.uniqueId] = { action: change.action, path: change.file, edits: inverseEdits };
+                statusEl.textContent = `Đã cập nhật tệp ${change.file}`;
+                return true;
+            } else {
+                await showAlert("Lỗi", `Không tìm thấy mã cũ trong tệp ${change.file}. Vui lòng thử áp dụng thủ công.`);
+                return false;
+            }
+        }
+
+        async function applyInjectChange(change, targetModel) {
+            const injectionRange = findFunctionInjectionPoint(targetModel, change.functionSignature, change.position);
+            if (injectionRange) {
+                let inverseEdits;
+                const textToInject = change.position === 'start' ? `\n${change.codeToInject}` : `${change.codeToInject}\n`;
+                targetModel.pushEditOperations([], [{ range: injectionRange, text: textToInject }], (inverse) => { inverseEdits = inverse; return null; });
+                undoStacks[change.uniqueId] = { action: 'inject_into_function', path: change.file, edits: inverseEdits };
+                statusEl.textContent = `Đã chèn code vào hàm trong tệp ${change.file}`;
+                return true;
+            } else {
+                 await showAlert("Lỗi", `Không tìm thấy hàm với chữ ký "${change.functionSignature}" trong tệp ${change.file}.`);
+                return false;
+            }
+        }
+
+        async function applyRenameChange(change) {
+            let allInverseEdits = [];
+            for (const filePath of change.file_scope) {
+                const model = projectModels[filePath];
+                if (model) {
+                    const matches = model.findMatches(change.old_name, false, false, true, null, true);
+                    const edits = matches.map(match => ({ range: match.range, text: change.new_name }));
+                    model.pushEditOperations([], edits, (inverse) => { allInverseEdits.push({path: filePath, edits: inverse}); return null; });
+                }
+            }
+            undoStacks[change.uniqueId] = { action: 'rename_symbol', multi_file_edits: allInverseEdits };
+            statusEl.textContent = `Đã đổi tên '${change.old_name}' thành '${change.new_name}'.`;
+            return true;
+        }
+
+        async function applyWrapChange(change, targetModel) {
+            const matchRange = findCodeBlockRange(targetModel, change.code_to_wrap);
+            if(matchRange) {
+                let inverseEdits;
+                const originalText = targetModel.getValueInRange(matchRange);
+                const newText = `${change.prefix}${originalText}${change.suffix}`;
+                targetModel.pushEditOperations([], [{ range: matchRange, text: newText }], (inverse) => { inverseEdits = inverse; return null; });
+                undoStacks[change.uniqueId] = { action: 'wrap_code', path: change.file, edits: inverseEdits };
+                statusEl.textContent = `Đã bọc code trong tệp ${change.file}`;
+                return true;
+            } else {
+                await showAlert("Lỗi", `Không tìm thấy đoạn code cần bọc trong tệp ${change.file}.`);
+                return false;
+            }
+        }
+
+        async function applyExtractChange(change, targetModel) {
+            const matchRange = findCodeBlockRange(targetModel, change.code_to_extract);
+            if (matchRange) {
+                let inverseEdits;
+                const newFunction = `\n\nfunction ${change.new_function_name}(${(change.new_function_parameters || []).join(', ')}) {\n    ${change.code_to_extract}\n}\n`;
+                const endOfFile = new monaco.Range(targetModel.getLineCount() + 1, 1, targetModel.getLineCount() + 1, 1);
+                
+                targetModel.pushEditOperations([], [
+                    { range: matchRange, text: change.replace_with_call },
+                    { range: endOfFile, text: newFunction }
+                ], (inverse) => { inverseEdits = inverse; return null; });
+
+                undoStacks[change.uniqueId] = { action: 'extract_to_function', path: change.file, edits: inverseEdits };
+                statusEl.textContent = `Đã tách code ra hàm mới trong tệp ${change.file}`;
+                return true;
+            } else {
+                await showAlert("Lỗi", `Không tìm thấy đoạn code cần tách trong tệp ${change.file}.`);
+                return false;
+            }
+        }
+
         function undoChange(uniqueId) {
             const undoInfo = undoStacks[uniqueId];
             if (!undoInfo) return;
             
             if (undoInfo.action === 'create') {
-                window.handleDelete(undoInfo.path, true);
+                handleDelete(undoInfo.path, true);
                 statusEl.textContent = `Đã hoàn tác (xóa) tệp ${undoInfo.path}`;
             } else if (undoInfo.action === 'rename_symbol') {
                 undoInfo.multi_file_edits.forEach(undoEdit => {
@@ -1530,6 +1622,71 @@ ${taskDescription}`;
             card.querySelector('.undo-buttons').classList.add('hidden');
         }
         
+        // NEW: Function to handle on-demand explanation from AI.
+        async function handleExplainChange(change) {
+            const card = document.getElementById(change.uniqueId);
+            const explainButton = card.querySelector('.explain-button');
+            const explainButtonSpan = explainButton.querySelector('span');
+            
+            explainButton.disabled = true;
+            explainButtonSpan.classList.add('hidden');
+            const spinner = document.createElement('div');
+            spinner.className = 'spinner';
+            explainButton.appendChild(spinner);
+
+            try {
+                let changeContext = '';
+                switch(change.action) {
+                    case 'modify':
+                    case 'refactor':
+                        changeContext = `OLD CODE:\n\`\`\`\n${change.oldCode}\n\`\`\`\n\nNEW CODE:\n\`\`\`\n${change.newCode}\n\`\`\``;
+                        break;
+                    case 'create':
+                        changeContext = `NEW FILE CREATED: ${change.file}\n\nNEW CODE:\n\`\`\`\n${change.newCode}\n\`\`\``;
+                        break;
+                    case 'add':
+                         changeContext = `CODE TO ADD:\n\`\`\`\n${change.newCode}\n\`\`\`\n\nANCHOR CODE (the new code will be added ${change.position}):\n\`\`\`\n${change.anchorCode}\n\`\`\``;
+                        break;
+                    case 'remove':
+                         changeContext = `CODE TO REMOVE:\n\`\`\`\n${change.codeToRemove}\n\`\`\``;
+                        break;
+                    default:
+                        changeContext = `CHANGE DETAILS:\n${JSON.stringify(change, null, 2)}`;
+                }
+
+                const prompt = `Bạn là một chuyên gia lập trình và là một người giải thích code bậc thầy.
+                Nhiệm vụ của bạn là giải thích một đề xuất thay đổi code một cách chi tiết, rõ ràng và thân thiện cho người dùng Việt Nam.
+                
+                Bối cảnh: Người dùng đã yêu cầu một thay đổi, và bạn (AI) đã đề xuất một giải pháp. Bây giờ, người dùng muốn hiểu TẠI SAO bạn lại đề xuất như vậy.
+
+                ĐÂY LÀ ĐỀ XUẤT THAY ĐỔI CẦN GIẢI THÍCH:
+                Hành động: ${change.action}
+                Tệp: ${change.file}
+                ${changeContext}
+
+                YÊU CẦU GIẢI THÍCH:
+                1.  **Mục tiêu chính:** Bắt đầu bằng một câu tóm tắt mục tiêu của sự thay đổi này là gì.
+                2.  **Giải thích chi tiết:** Phân tích từng phần của sự thay đổi. Nếu là sửa đổi, hãy so sánh "trước" và "sau". Nếu là thêm mới, hãy giải thích chức năng của đoạn code mới.
+                3.  **Lý do lựa chọn:** Tại sao bạn lại chọn giải pháp này? Có giải pháp nào khác không và tại sao giải pháp này lại tốt hơn trong bối cảnh này?
+                4.  **Tác động:** Sự thay đổi này ảnh hưởng như thế nào đến phần còn lại của dự án?
+
+                Hãy trả lời hoàn toàn bằng tiếng Việt. Sử dụng định dạng Markdown để câu trả lời dễ đọc (dùng tiêu đề, danh sách, in đậm, v.v.).`;
+
+                const result = await aiModel.generateContent(prompt);
+                const explanationHtml = marked.parse(result.response.text());
+                
+                await showAlert(`Giải thích cho thay đổi tại "${change.file}"`, explanationHtml);
+
+            } catch (error) {
+                console.error("Lỗi khi tạo giải thích:", error);
+                await showAlert("Lỗi AI", `Không thể tạo giải thích: ${error.message}`);
+            } finally {
+                explainButton.disabled = false;
+                explainButton.removeChild(spinner);
+                explainButtonSpan.classList.remove('hidden');
+            }
+        }
+
         // --- New Project Creation Logic ---
         function openNewProjectChatModal() {
             newProjectChatHistory = [];
@@ -1826,9 +1983,10 @@ ${taskDescription}`;
             setTimeout(() => genericModal.querySelector('div').classList.remove('scale-95'), 10);
         }
 
-        function showAlert(title, message) {
+        // UPDATED: showAlert now accepts raw HTML content to display formatted markdown.
+        function showAlert(title, messageContent) {
             return new Promise(resolve => {
-                showModal(title, `<p class="text-gray-700 whitespace-pre-wrap">${message}</p>`, [
+                showModal(title, `<div class="text-gray-700">${messageContent}</div>`, [
                     { text: 'Đã hiểu', class: 'px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700', handler: () => { hideModal(); resolve(); } }
                 ]);
             });
